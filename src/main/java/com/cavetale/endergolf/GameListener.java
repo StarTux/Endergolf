@@ -9,7 +9,9 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityChangeBlockEvent;
+import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
 
 @RequiredArgsConstructor
 public final class GameListener implements Listener {
@@ -47,5 +49,19 @@ public final class GameListener implements Listener {
         final Game game = Game.in(event.getPlayer().getWorld());
         if (game == null) return;
         game.onPlayerHud(event);
+    }
+
+    @EventHandler
+    private void onPlayerChangedWorld(PlayerChangedWorldEvent event) {
+        final Game game = Game.in(event.getPlayer().getWorld());
+        if (game == null) return;
+        game.onPlayerChangedWorld(event.getPlayer());
+    }
+
+    @EventHandler
+    private void onPlayerJoin(PlayerJoinEvent event) {
+        final Game game = Game.in(event.getPlayer().getWorld());
+        if (game == null) return;
+        game.onPlayerJoin(event.getPlayer());
     }
 }

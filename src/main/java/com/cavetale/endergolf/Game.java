@@ -5,6 +5,7 @@ import com.cavetale.area.struct.AreasFile;
 import com.cavetale.core.event.hud.PlayerHudEvent;
 import com.cavetale.core.event.hud.PlayerHudPriority;
 import com.cavetale.core.struct.Cuboid;
+import com.cavetale.core.struct.Vec2i;
 import com.cavetale.core.struct.Vec3i;
 import com.cavetale.mytems.Mytems;
 import com.cavetale.mytems.util.Entities;
@@ -17,12 +18,16 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.Consumer;
 import lombok.Data;
 import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.Component;
+import org.bukkit.Chunk;
 import org.bukkit.Difficulty;
 import org.bukkit.GameMode;
 import org.bukkit.GameRule;
@@ -35,6 +40,7 @@ import org.bukkit.Tag;
 import org.bukkit.World;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.block.Block;
+import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.FallingBlock;
 import org.bukkit.entity.Player;
 import org.bukkit.event.block.Action;
@@ -70,12 +76,15 @@ public final class Game {
     private final BuildWorld buildWorld;
     private MapReview mapReview;
     private World world;
+    private final List<Cuboid> forceLoadedAreas = new ArrayList<>();
     private final Map<UUID, GamePlayer> players = new HashMap<>();
     private boolean finished;
     private State state = State.INIT;
     private Vec3i teeVector;
     private Cuboid holeArea;
     private int par;
+    private int totalPlaying;
+    private int totalNotFinished;
     // Updated in tick()
     private Instant now;
     // Countdown
@@ -84,6 +93,11 @@ public final class Game {
     private long countdownSeconds;
     // Play
     private boolean doDebugGravity = false;
+    // End
+    private Instant endStart;
+    private Instant endStop;
+    private long endSeconds;
+    private float endProgress;
 
     public enum State {
         INIT,
@@ -124,7 +138,6 @@ public final class Game {
         buildWorld.makeLocalCopyAsync(loadedWorld -> {
                 world = loadedWorld;
                 prepareWorld();
-                loadAreas();
                 EndergolfPlugin.endergolfPlugin().getGames().addAndEnable(this);
             });
     }
@@ -135,7 +148,7 @@ public final class Game {
         world.setGameRule(GameRule.DO_WEATHER_CYCLE, false);
         world.setGameRule(GameRule.FALL_DAMAGE, false);
         world.setGameRule(GameRule.DROWNING_DAMAGE, false);
-        world.setGameRule(GameRule.LOCATOR_BAR, false);
+        world.setGameRule(GameRule.LOCATOR_BAR, true);
     }
 
     private void loadAreas() {
@@ -161,12 +174,38 @@ public final class Game {
         if (holeArea == null) {
             throw new IllegalStateException("[" + getWorldName() + "] No hole area");
         }
+        for (Area area : areasFile.find("load")) {
+            forceLoadedAreas.add(area.toCuboid());
+        }
     }
 
     public void enable() {
         if (world == null) {
             throw new IllegalStateException("World not loaded");
         }
+        loadAreas();
+        // Force load all chunks
+        final Set<Vec2i> forceLoadedChunks = new HashSet<>();
+        forceLoadedChunks.add(teeVector.blockToChunk());
+        forceLoadedChunks.addAll(holeArea.blockToChunk().enumerateHorizontally());
+        for (Cuboid forceLoadedArea : forceLoadedAreas) {
+            forceLoadedChunks.addAll(forceLoadedArea.blockToChunk().enumerateHorizontally());
+        }
+        plugin.getLogger().info("[" + getWorldName() + "] Force loading " + forceLoadedChunks.size() + " chunks");
+        for (Vec2i c : forceLoadedChunks) {
+            world.getChunkAtAsync(c.x, c.z, (Consumer<Chunk>) chunk -> chunk.setForceLoaded(true));
+        }
+        final Vec3i holeCenter = holeArea.getCenter();
+        final Vec2i holeChunk = holeCenter.blockToChunk();
+        world.getChunkAtAsync(holeChunk.x, holeChunk.z, (Consumer<Chunk>) chunk -> {
+                final Location location = holeCenter.toCenterFloorLocation(world);
+                world.spawn(location, ArmorStand.class, e -> {
+                        e.setInvisible(true);
+                        e.setGravity(false);
+                        e.getAttribute(Attribute.WAYPOINT_TRANSMIT_RANGE).setBaseValue(60.000);
+                    });
+            });
+        // Compute distance and par
         final int distance = (int) Math.round(teeVector.distance(holeArea.getCenter()));
         if (par == 0) {
             if (distance <= 250) {
@@ -187,6 +226,7 @@ public final class Game {
             teleport(player, world.getSpawnLocation());
             player.getInventory().clear();
             player.setGameMode(GameMode.SPECTATOR);
+            player.getAttribute(Attribute.WAYPOINT_TRANSMIT_RANGE).setBaseValue(0.0);
         }
         if (players.isEmpty()) {
             throw new IllegalStateException("[" + getWorldName() + "] No players");
@@ -208,6 +248,9 @@ public final class Game {
 
     public void disable() {
         if (world != null) {
+            for (Chunk chunk : world.getForceLoadedChunks()) {
+                chunk.setForceLoaded(false);
+            }
             for (Player player : world.getPlayers()) {
                 plugin.warpToLobby(player);
             }
@@ -251,6 +294,12 @@ public final class Game {
                 }
             }
             break;
+        case END:
+            endStart = now;
+            endSeconds = 30L;
+            endStop = now.plus(Duration.ofSeconds(endSeconds));
+            endProgress = 1f;
+            break;
         default: break;
         }
         // Set
@@ -281,10 +330,18 @@ public final class Game {
             final List<GamePlayer> waitingPlayers = new ArrayList<>();
             final List<Stroke> strokes = new ArrayList<>();
             // Check on all players and tick them
+            totalPlaying = 0;
+            totalNotFinished = 0;
             for (GamePlayer gp : players.values()) {
                 tickPlay(gp);
-                if (gp.isPlaying() && !gp.isObsolete()) {
-                    notObsolete += 1;
+                if (gp.isPlaying()) {
+                    totalPlaying += 1;
+                    if (!gp.isObsolete()) {
+                        notObsolete += 1;
+                    }
+                    if (!gp.isFinished()) {
+                        totalNotFinished += 1;
+                    }
                 }
                 if (gp.getState() == GamePlayer.State.WAIT && gp.getWaitingSince() != null && gp.getPlayer() != null && now.isAfter(gp.getStrokeCooldown())) {
                     waitingPlayers.add(gp);
@@ -295,7 +352,6 @@ public final class Game {
             }
             if (notObsolete == 0) {
                 setState(State.END);
-                finished = true;
                 return;
             }
             // Give all waiting players a chance to stroke
@@ -327,6 +383,16 @@ public final class Game {
                     player.getInventory().setItemInOffHand(Mytems.MAGIC_MAP.createItemStack());
                 }
                 updateBallCompass(player, gp);
+            }
+            break;
+        case END:
+            if (now.isAfter(endStop)) {
+                finished = true;
+            } else {
+                final Duration totalEndTime = Duration.between(endStart, endStop);
+                final Duration remainingEndTime = Duration.between(now, endStop);
+                endSeconds = remainingEndTime.toSeconds();
+                endProgress = (float) remainingEndTime.toMillis() / (float) totalEndTime.toMillis();
             }
             break;
         default: break;
@@ -419,7 +485,7 @@ public final class Game {
             if (finishTime.toSeconds() >= 5) {
                 mapReview.remindOnce(player);
             }
-            if (finishTime.toSeconds() >= 30) {
+            if (finishTime.toSeconds() >= 10) {
                 gp.setState(GamePlayer.State.OBSOLETE);
                 gp.setObsolete(true);
             }
@@ -716,6 +782,7 @@ public final class Game {
     public void onPlayerHud(PlayerHudEvent event) {
         final List<Component> sidebar = new ArrayList<>();
         final GamePlayer gp = getGamePlayer(event.getPlayer());
+        sidebar.add(textOfChildren(text(tiny("playing "), GRAY), text(totalNotFinished, WHITE), text("/", DARK_GRAY), text(totalPlaying, WHITE)));
         if (gp != null && gp.isPlaying()) {
             final int strokes = gp.getStrokeCount();
             sidebar.add(textOfChildren(text(tiny("hole "), GRAY),
@@ -740,7 +807,19 @@ public final class Game {
             default: break;
             }
         }
+        if (state == State.END) {
+            sidebar.add(textOfChildren(text(tiny("game over "), GRAY), text(endSeconds, WHITE)));
+            event.bossbar(PlayerHudPriority.HIGH, text("Game Over", RED), BossBar.Color.RED, BossBar.Overlay.NOTCHED_20, endProgress);
+        }
         event.sidebar(PlayerHudPriority.HIGH, sidebar);
+    }
+
+    public void onPlayerChangedWorld(Player player) {
+        player.getAttribute(Attribute.WAYPOINT_TRANSMIT_RANGE).setBaseValue(0.0);
+    }
+
+    public void onPlayerJoin(Player player) {
+        player.getAttribute(Attribute.WAYPOINT_TRANSMIT_RANGE).setBaseValue(0.0);
     }
 
     public void onPlayerUseCompass(Player player) {
