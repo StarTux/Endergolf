@@ -21,15 +21,15 @@ import static net.kyori.adventure.text.format.TextDecoration.*;
 @Getter
 @RequiredArgsConstructor
 public enum GolfClub {
-    PUTTER(0.35, Material.IRON_SHOVEL,
+    PUTTER(0.25, Material.IRON_SHOVEL,
            "The weakest club in terms of power, used for rolling the ball on the green. It is essential for accuracy and control on the putting surface."),
     DINKER(0.5, Material.IRON_HOE,
            "A very short-range club for delicate shots around the green. It imparts minimal power, allowing for precise, soft landings."),
     BUMPER(0.75, Material.IRON_AXE,
            "A shorter-range club designed for approach shots to the green. It provides more control and accuracy, making it easier to land the ball near the target."),
-    THUMPER(1, Material.IRON_PICKAXE,
+    THUMPER(1.0, Material.IRON_PICKAXE,
             "A mid-range club that offers a balance between distance and control. Suitable for a variety of shots where precision is important but some power is still needed."),
-    BOOMER(2.5, Material.MACE,
+    BOOMER(1.5, Material.MACE,
            "The strongest club in your set, designed for maximum distance. Ideal for tee shots and long fairway shots where power is the primary concern."),
     ;
 
@@ -45,7 +45,7 @@ public enum GolfClub {
         lore.addAll(Text.wrapLore2(description, txt -> text(tiny(txt), GRAY).decoration(ITALIC, false)));
         lore.add(empty());
         lore.add(textOfChildren(text(tiny("strength "), DARK_GRAY), text((int) Math.round(strength * 20.0), WHITE)).decoration(ITALIC, false));
-        lore.add(textOfChildren(Mytems.MOUSE_LEFT, text(" Strike", GREEN)).decoration(ITALIC, false));
+        lore.add(textOfChildren(Mytems.MOUSE_RIGHT, text(" Stroke", GREEN)).decoration(ITALIC, false));
         result.setData(DataComponentTypes.LORE, lore(lore));
         return result;
     }

@@ -48,7 +48,7 @@ public enum GroundType {
      */
     public static GroundType at(Block block) {
         final Material mat = block.getType();
-        if (!mat.isEmpty()) {
+        if (!mat.isAir()) {
             if (mat == Material.WATER) {
                 return WATER;
             }

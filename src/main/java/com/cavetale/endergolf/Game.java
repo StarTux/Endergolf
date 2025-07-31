@@ -4,9 +4,14 @@ import com.cavetale.area.struct.Area;
 import com.cavetale.area.struct.AreasFile;
 import com.cavetale.core.event.hud.PlayerHudEvent;
 import com.cavetale.core.event.hud.PlayerHudPriority;
+import com.cavetale.core.struct.Cuboid;
 import com.cavetale.core.struct.Vec3i;
+import com.cavetale.mytems.Mytems;
+import com.cavetale.mytems.util.Entities;
 import com.winthier.creative.BuildWorld;
 import com.winthier.creative.file.Files;
+import com.winthier.creative.review.MapReview;
+import io.papermc.paper.datacomponent.DataComponentTypes;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -34,11 +39,14 @@ import org.bukkit.entity.FallingBlock;
 import org.bukkit.entity.Player;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.util.BoundingBox;
 import org.bukkit.util.RayTraceResult;
 import org.bukkit.util.Vector;
 import static com.cavetale.core.font.Unicode.tiny;
+import static io.papermc.paper.datacomponent.item.ItemLore.lore;
+import static io.papermc.paper.datacomponent.item.LodestoneTracker.lodestoneTracker;
 import static net.kyori.adventure.text.Component.empty;
 import static net.kyori.adventure.text.Component.text;
 import static net.kyori.adventure.text.Component.textOfChildren;
@@ -60,12 +68,14 @@ import static net.kyori.adventure.title.Title.title;
 public final class Game {
     private final EndergolfPlugin plugin;
     private final BuildWorld buildWorld;
+    private MapReview mapReview;
     private World world;
     private final Map<UUID, GamePlayer> players = new HashMap<>();
     private boolean finished;
     private State state = State.INIT;
     private Vec3i teeVector;
-    private Vec3i holeVector;
+    private Cuboid holeArea;
+    private int par;
     // Updated in tick()
     private Instant now;
     // Countdown
@@ -140,16 +150,16 @@ public final class Game {
             this.teeVector = area.getMin();
         }
         for (Area area : areasFile.find("hole")) {
-            if (holeVector != null) {
+            if (holeArea != null) {
                 throw new IllegalStateException("[" + getWorldName() + "] Multiple hole areas");
             }
-            this.holeVector = area.getMin();
+            this.holeArea = area.toCuboid();
         }
         if (teeVector == null) {
             throw new IllegalStateException("[" + getWorldName() + "] No tee vector");
         }
-        if (holeVector == null) {
-            throw new IllegalStateException("[" + getWorldName() + "] No hole vector");
+        if (holeArea == null) {
+            throw new IllegalStateException("[" + getWorldName() + "] No hole area");
         }
     }
 
@@ -157,7 +167,16 @@ public final class Game {
         if (world == null) {
             throw new IllegalStateException("World not loaded");
         }
-        final int distance = (int) Math.round(teeVector.distance(holeVector));
+        final int distance = (int) Math.round(teeVector.distance(holeArea.getCenter()));
+        if (par == 0) {
+            if (distance <= 250) {
+                par = 3;
+            } else if (distance <= 470) {
+                par = 4;
+            } else {
+                par = 5;
+            }
+        }
         for (GamePlayer gp : List.copyOf(players.values())) {
             final Player player = gp.getPlayer();
             if (player == null) {
@@ -172,6 +191,8 @@ public final class Game {
         if (players.isEmpty()) {
             throw new IllegalStateException("[" + getWorldName() + "] No players");
         }
+        mapReview = MapReview.start(world, buildWorld);
+        buildWorld.announceMap(world);
         setState(State.COUNTDOWN);
     }
 
@@ -200,6 +221,7 @@ public final class Game {
      */
     public void setState(final State newState) {
         final State oldState = this.state;
+        plugin.getLogger().info("[" + getWorldName() + "] State " + oldState + " => " + newState);
         // Exit
         switch (oldState) {
         default: break;
@@ -255,42 +277,44 @@ public final class Game {
             break;
         }
         case PLAY:
-            int notFinished = 0;
+            int notObsolete = 0;
             final List<GamePlayer> waitingPlayers = new ArrayList<>();
-            final List<Strike> strikes = new ArrayList<>();
+            final List<Stroke> strokes = new ArrayList<>();
             // Check on all players and tick them
             for (GamePlayer gp : players.values()) {
                 tickPlay(gp);
-                if (gp.isPlaying() && !gp.isFinished()) {
-                    notFinished += 1;
+                if (gp.isPlaying() && !gp.isObsolete()) {
+                    notObsolete += 1;
                 }
-                if (gp.getState() == GamePlayer.State.WAIT && gp.getWaitingSince() != null && gp.getPlayer() != null && now.isAfter(gp.getStrikeCooldown())) {
+                if (gp.getState() == GamePlayer.State.WAIT && gp.getWaitingSince() != null && gp.getPlayer() != null && now.isAfter(gp.getStrokeCooldown())) {
                     waitingPlayers.add(gp);
                 }
-                if (gp.getStrike() != null) {
-                    strikes.add(gp.getStrike());
+                if (gp.getStroke() != null) {
+                    strokes.add(gp.getStroke());
                 }
             }
-            if (notFinished == 0) {
+            if (notObsolete == 0) {
                 setState(State.END);
+                finished = true;
                 return;
             }
-            // Give all waiting players a chance to strike
+            // Give all waiting players a chance to stroke
             waitingPlayers.sort(Comparator.comparing(GamePlayer::getWaitingSince));
             for (GamePlayer gp : waitingPlayers) {
                 boolean tooClose = false;
-                for (Strike strike : strikes) {
+                for (Stroke stroke : strokes) {
                     // Distance must be at least 4
-                    if (strike.getBallVector().distanceSquared(gp.getBallVector()) < 16.0) {
+                    if (stroke.getBallVector().distanceSquared(gp.getBallVector()) < 16.0) {
                         tooClose = true;
                         break;
                     }
                 }
                 if (tooClose) continue;
-                final Strike strike = new Strike(this, gp, gp.getBallVector(), now, now.plus(Duration.ofSeconds(45)));
-                strike.enable();
-                gp.setStrike(strike);
-                gp.setState(GamePlayer.State.STRIKE);
+                final Stroke stroke = new Stroke(this, gp, gp.getBallVector(), now, now.plus(Duration.ofSeconds(45)));
+                strokes.add(stroke);
+                stroke.enable();
+                gp.setStroke(stroke);
+                gp.setState(GamePlayer.State.STROKE);
                 final Player player = gp.getPlayer();
                 if (player.getGameMode() == GameMode.SPECTATOR) {
                     teleport(player, gp.getBallVector().toCenterFloorLocation(world).add(0.0, 1.0, 0.0));
@@ -299,7 +323,10 @@ public final class Game {
                     for (GolfClub club : GolfClub.values()) {
                         player.getInventory().setItem(club.ordinal(), club.createItemStack());
                     }
+                    player.getInventory().addItem(makeBallCompass());
+                    player.getInventory().setItemInOffHand(Mytems.MAGIC_MAP.createItemStack());
                 }
+                updateBallCompass(player, gp);
             }
             break;
         default: break;
@@ -318,28 +345,32 @@ public final class Game {
             if (gp.getOfflineSince() == null) {
                 gp.setOfflineSince(Instant.now());
             }
-            // Cancel current strike if any
-            if (gp.getState() == GamePlayer.State.STRIKE) {
-                gp.getStrike().disable();
-                gp.setStrike(null);
+            // Cancel current stroke if any
+            if (gp.getState() == GamePlayer.State.STROKE) {
+                gp.getStroke().disable();
+                gp.setStroke(null);
             }
             // Remove from game
             if (Duration.between(gp.getOfflineSince(), now).toSeconds() > 60L) {
                 plugin.getLogger().info("[" + getWorldName() + "] Removing " + gp.getName() + " because they have been offline too long");
                 gp.setPlaying(false);
                 gp.setState(GamePlayer.State.SPECTATE);
+                if (gp.getFlightBall() != null) {
+                    gp.getFlightBall().remove();
+                    gp.setFlightBall(null);
+                }
             }
             return;
         }
         assert player != null;
         switch (gp.getState()) {
         case WAIT:
-            // Switching from WAIT to STRIKE is handled outside this
+            // Switching from WAIT to STROKE is handled outside this
             // function because we must order all waiting players by
             // their waitingSince timestamp.
             break;
-        case STRIKE:
-            tickStrike(gp, player, gp.getStrike());
+        case STROKE:
+            tickStroke(gp, player, gp.getStroke());
             break;
         case FLIGHT:
             if (gp.getFlightBall().isDead()) {
@@ -351,7 +382,7 @@ public final class Game {
                     player.sendMessage(text("Your ball fell out of the world", RED));
                     gp.setState(GamePlayer.State.WAIT);
                     gp.setWaitingSince(now);
-                    gp.setStrikeCooldown(now.plus(Duration.ofSeconds(5)));
+                    gp.setStrokeCooldown(now.plus(Duration.ofSeconds(5)));
                     gp.setFlightBall(null);
                     gp.setBallVelocity(null);
                 } else if (!vector.toBlock(world).isEmpty() && !Tag.REPLACEABLE.isTagged(vector.toBlock(world).getType())) {
@@ -381,7 +412,20 @@ public final class Game {
                         plugin.getLogger().info("OK");
                     }
                 }
+            }
+            break;
+        case FINISH: {
+            final Duration finishTime = Duration.between(gp.getFinishedSince(), now);
+            if (finishTime.toSeconds() >= 5) {
+                mapReview.remindOnce(player);
+            }
+            if (finishTime.toSeconds() >= 30) {
+                gp.setState(GamePlayer.State.OBSOLETE);
+                gp.setObsolete(true);
+            }
+            break;
         }
+        case OBSOLETE: break;
         default: break;
         }
     }
@@ -389,17 +433,39 @@ public final class Game {
     /**
      * Here we give the player a preview of where their ball might fly
      * if they hit it.
+     * We also watch over a timeout.
      */
-    private void tickStrike(GamePlayer gp, Player player, Strike strike) {
+    private void tickStroke(GamePlayer gp, Player player, Stroke stroke) {
+        final Duration totalStrokeTime = Duration.between(stroke.getStartTime(), stroke.getEndTime());
+        final Duration remainingStrokeTime = Duration.between(now, stroke.getEndTime());
+        gp.setStrokeProgress((float) remainingStrokeTime.toMillis() / (float) totalStrokeTime.toMillis());
+        if (now.isAfter(stroke.getEndTime())) {
+            stroke.disable();
+            gp.setStroke(null);
+            gp.setPlaying(false);
+            gp.setFinished(true);
+            gp.setObsolete(true);
+            gp.setState(GamePlayer.State.OBSOLETE);
+            player.showTitle(title(text("Timeout", DARK_RED),
+                                   text("Disqualified", DARK_RED),
+                                   times(Duration.ofSeconds(1),
+                                         Duration.ofSeconds(3),
+                                         Duration.ofSeconds(1))));
+            final Component message = text(player.getName() + " timed out and are disqualified", DARK_RED);
+            for (Player p : getPresentPlayers()) {
+                p.sendMessage(message);
+            }
+            return;
+        }
         final RayTraceResult rayTrace = player.rayTraceBlocks(4.0);
-        if (rayTrace == null || rayTrace.getHitBlock() == null || !strike.getBallVector().equals(Vec3i.of(rayTrace.getHitBlock()))) {
+        if (rayTrace == null || rayTrace.getHitBlock() == null || !stroke.getBallVector().equals(Vec3i.of(rayTrace.getHitBlock()))) {
             return;
         }
         final GolfClub club = GolfClub.ofMaterial(player.getInventory().getItemInMainHand().getType());
         if (club == null) return;
-        Vector velocity = getStrikeDirection(rayTrace.getHitPosition(), strike.getBallVector())
+        Vector velocity = getStrokeDirection(rayTrace.getHitPosition(), stroke.getBallVector())
             .multiply(club.getStrength());
-        Location location = strike.getBallVector().toCenterFloorLocation(world);
+        Location location = stroke.getBallVector().toCenterFloorLocation(world);
         for (int i = 0; i < 100; i += 1) {
             player.spawnParticle(Particle.CURRENT_DOWN, location, 1, 0.0, 0.0, 0.0, 0.0);
             if (velocity.length() >= 2.0) {
@@ -447,7 +513,15 @@ public final class Game {
             event.setCancelled(true);
             return;
         }
-        if (!event.hasBlock() || event.getAction() != Action.LEFT_CLICK_BLOCK) {
+        if (event.hasItem() && (event.getAction() == Action.RIGHT_CLICK_BLOCK || event.getAction() == Action.RIGHT_CLICK_AIR) && event.getItem().getType() == Material.COMPASS) {
+            event.setCancelled(true);
+            onPlayerUseCompass(event.getPlayer());
+            return;
+        }
+        if (!event.hasBlock() || (event.getAction() != Action.LEFT_CLICK_BLOCK && event.getAction() != Action.RIGHT_CLICK_BLOCK)) {
+            // Adventure GameMode appears to always send
+            // RIGHT_CLICK_BLOCK followed by LEFT_CLICK_BLOCK when the
+            // player right clicks a block.
             return;
         }
         if (!event.hasItem()) {
@@ -455,11 +529,11 @@ public final class Game {
         }
         final Player player = event.getPlayer();
         final GamePlayer gp = getGamePlayer(player);
-        if (gp == null || !gp.isPlaying() || gp.getState() != GamePlayer.State.STRIKE) {
+        if (gp == null || !gp.isPlaying() || gp.getState() != GamePlayer.State.STROKE) {
             return;
         }
         final Vec3i clickVector = Vec3i.of(event.getClickedBlock());
-        if (!clickVector.equals(gp.getStrike().getBallVector())) {
+        if (!clickVector.equals(gp.getStroke().getBallVector())) {
             return;
         }
         final RayTraceResult rayTrace = player.rayTraceBlocks(4.0);
@@ -470,16 +544,16 @@ public final class Game {
         if (club == null) {
             return;
         }
-        gp.getStrike().disable();
-        gp.setStrike(null);
+        gp.getStroke().disable();
+        gp.setStroke(null);
         gp.setState(GamePlayer.State.FLIGHT);
-        gp.setStrikeCount(gp.getStrikeCount() + 1);
-        final Vector velocity = getStrikeDirection(rayTrace.getHitPosition(), clickVector)
+        gp.setStrokeCount(gp.getStrokeCount() + 1);
+        final Vector velocity = getStrokeDirection(rayTrace.getHitPosition(), clickVector)
             .multiply(club.getStrength());
         final Location ballLocation = clickVector.toCenterFloorLocation(world);
         gp.setFlightBall(spawnBall(ballLocation, velocity));
         gp.setBallVelocity(velocity);
-        world.playSound(ballLocation, Sound.ITEM_MACE_SMASH_GROUND, SoundCategory.MASTER, 1.0f, 1.5f);
+        world.playSound(ballLocation, Sound.BLOCK_NOTE_BLOCK_IRON_XYLOPHONE, SoundCategory.MASTER, 1f, 0.5f);
         world.spawnParticle(Particle.BLOCK, ballLocation.clone().add(0, 0.5, 0), 32, 0.4, 0.125, 0.4, 0.0, Material.DRAGON_EGG.createBlockData());
     }
 
@@ -517,12 +591,55 @@ public final class Game {
      * As a side effect, the GamePlayer state may be updated.
      */
     public boolean onBallLand(GamePlayer gp, FallingBlock falling, Block block) {
+        final Vec3i blockVector = Vec3i.of(block);
+        if (holeArea.contains(blockVector)) {
+            // Hole In (or Out)
+            gp.setFinished(true);
+            gp.setBallVector(blockVector);
+            gp.setState(GamePlayer.State.FINISH);
+            gp.setFinishedSince(now);
+            falling.remove();
+            gp.setFlightBall(null);
+            final int strokes = gp.getStrokeCount();
+            plugin.getLogger().info("[" + getWorldName() + "] " + gp.getName()
+                                    + " finished with " + strokes + "/" + par + " strokes: "
+                                    + gp.getPerformanceString());
+            final Component term = GolfScoringTerm.getComponent(strokes, par);
+            final Component message = textOfChildren(text(gp.getName(), WHITE),
+                                                     text(" completed ", GRAY),
+                                                     text(buildWorld.getName(), WHITE),
+                                                     text(" in ", GRAY),
+                                                     text(strokes, WHITE),
+                                                     text(" strokes on a ", GRAY),
+                                                     text("par-" + par, WHITE),
+                                                     text(": "),
+                                                     term);
+            for (Player p : getPresentPlayers()) {
+                p.sendMessage(message);
+            }
+            final Player player = gp.getPlayer();
+            if (player != null) {
+                player.getInventory().clear();
+                player.showTitle(title(term,
+                                       textOfChildren(text("Hole: ", GRAY),
+                                                      text(strokes, WHITE),
+                                                      text(" (Par ", GRAY),
+                                                      text(par, WHITE),
+                                                      text(") | ", GRAY),
+                                                      text(gp.getPerformanceString(), WHITE)),
+                                       times(Duration.ofSeconds(1),
+                                             Duration.ofSeconds(3),
+                                             Duration.ofSeconds(1))));
+                player.playSound(player, Sound.UI_TOAST_CHALLENGE_COMPLETE, SoundCategory.MASTER, 1f, 2f);
+            }
+            return false;
+        }
         final GroundType ground = GroundType.at(block);
         if (ground.isReset()) {
             gp.setFlightBall(null);
             gp.setState(GamePlayer.State.WAIT);
             gp.setWaitingSince(now);
-            gp.setStrikeCooldown(now.plus(Duration.ofSeconds(5)));
+            gp.setStrokeCooldown(now.plus(Duration.ofSeconds(5)));
             final Player player = gp.getPlayer();
             if (player != null) {
                 player.showTitle(title(ground.getDisplayComponent(),
@@ -547,14 +664,15 @@ public final class Game {
             }
             return false;
         } else {
-            gp.setBallVector(Vec3i.of(block));
-            gp.setDistance((int) Math.round(gp.getBallVector().distance(holeVector)));
+            gp.setBallVector(blockVector);
+            gp.setDistance((int) Math.round(gp.getBallVector().distance(holeArea.getCenter())));
             gp.setFlightBall(null);
             gp.setState(GamePlayer.State.WAIT);
             gp.setWaitingSince(now);
             gp.setGroundType(ground);
             final Player player = gp.getPlayer();
             if (player != null) {
+                updateBallCompass(player, gp);
                 player.sendMessage(textOfChildren(text("Your ball landed in the ", WHITE),
                                                   ground.getDisplayComponent()));
                 player.showTitle(title(empty(),
@@ -581,7 +699,7 @@ public final class Game {
      * @param ballVector the block coordinates of the ball
      * @return the direction as a unit vector
      */
-    public Vector getStrikeDirection(Vector hitPoint, Vec3i ballVector) {
+    public Vector getStrokeDirection(Vector hitPoint, Vec3i ballVector) {
         final Vector ballCenter = ballVector.toVector().add(new Vector(0.5, 1.125, 0.5));
         final Vector difference = ballCenter.subtract(hitPoint);
         return difference.normalize();
@@ -591,6 +709,7 @@ public final class Game {
         return world.spawn(location, FallingBlock.class, e -> {
                 e.setBlockData(Material.DRAGON_EGG.createBlockData());
                 e.setVelocity(velocity);
+                Entities.setTransient(e);
             });
     }
 
@@ -598,15 +717,22 @@ public final class Game {
         final List<Component> sidebar = new ArrayList<>();
         final GamePlayer gp = getGamePlayer(event.getPlayer());
         if (gp != null && gp.isPlaying()) {
-            sidebar.add(textOfChildren(text(tiny("strikes "), GRAY), text(gp.getStrikeCount(), WHITE)));
-            sidebar.add(textOfChildren(text(tiny("distance "), GRAY), text(gp.getDistance(), WHITE), text("yd", DARK_GRAY)));
-            sidebar.add(textOfChildren(text(tiny("ground "), GRAY), gp.getGroundType().getDisplayComponent()));
+            final int strokes = gp.getStrokeCount();
+            sidebar.add(textOfChildren(text(tiny("hole "), GRAY),
+                                       text(strokes, WHITE),
+                                       text(tiny(" (par "), GRAY),
+                                       text(par, WHITE),
+                                       text(")", GRAY)));
+            if (!gp.isFinished()) {
+                sidebar.add(textOfChildren(text(tiny("distance "), GRAY), text(gp.getDistance(), WHITE), text("yd", DARK_GRAY)));
+                sidebar.add(textOfChildren(text(tiny("ground "), GRAY), gp.getGroundType().getDisplayComponent()));
+            }
             switch (gp.getState()) {
             case WAIT:
                 event.bossbar(PlayerHudPriority.HIGH, text("Please Wait for Others", GRAY), BossBar.Color.WHITE, BossBar.Overlay.PROGRESS, 0f);
                 break;
-            case STRIKE:
-                event.bossbar(PlayerHudPriority.HIGH, text("You're Up", GREEN), BossBar.Color.GREEN, BossBar.Overlay.PROGRESS, 1f);
+            case STROKE:
+                event.bossbar(PlayerHudPriority.HIGH, text("You're Up", GREEN), BossBar.Color.GREEN, BossBar.Overlay.NOTCHED_20, gp.getStrokeProgress());
                 break;
             case FLIGHT:
                 event.bossbar(PlayerHudPriority.HIGH, text("Look at It Go!", GREEN), BossBar.Color.WHITE, BossBar.Overlay.PROGRESS, 1f);
@@ -615,5 +741,32 @@ public final class Game {
             }
         }
         event.sidebar(PlayerHudPriority.HIGH, sidebar);
+    }
+
+    public void onPlayerUseCompass(Player player) {
+        final GamePlayer gp = getGamePlayer(player);
+        if (gp == null || !gp.isPlaying() || gp.isFinished()) return;
+        teleport(player, gp.getBallVector().toCenterFloorLocation(world).add(0.0, 1.0, 0.0));
+        player.playSound(player, Sound.ENTITY_ENDERMAN_TELEPORT, SoundCategory.MASTER, 1f, 1f);
+    }
+
+    public ItemStack makeBallCompass() {
+        final ItemStack item = new ItemStack(Material.COMPASS);
+        item.setData(DataComponentTypes.LODESTONE_TRACKER, lodestoneTracker().tracked(true).location(teeVector.toCenterLocation(world)));
+        item.setData(DataComponentTypes.CUSTOM_NAME, text("Ball Compass", LIGHT_PURPLE));
+        final List<Component> lore = List.of(text(tiny("Always points to your"), GRAY).decoration(ITALIC, false),
+                                             text(tiny("ball as long as it is"), GRAY).decoration(ITALIC, false),
+                                             text(tiny("on the ground."), GRAY).decoration(ITALIC, false),
+                                             empty(),
+                                             textOfChildren(Mytems.MOUSE_RIGHT, text(" Teleport", GRAY)).decoration(ITALIC, false));
+        item.setData(DataComponentTypes.LORE, lore(lore));
+        return item;
+    }
+
+    public void updateBallCompass(Player player, GamePlayer gp) {
+        for (ItemStack item : player.getInventory()) {
+            if (item == null || item.getType() != Material.COMPASS) continue;
+            item.setData(DataComponentTypes.LODESTONE_TRACKER, lodestoneTracker().tracked(true).location(gp.getBallVector().toCenterLocation(world)));
+        }
     }
 }

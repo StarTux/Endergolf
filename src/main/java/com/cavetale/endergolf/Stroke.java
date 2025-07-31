@@ -6,7 +6,7 @@ import lombok.Data;
 import org.bukkit.Material;
 
 @Data
-public final class Strike {
+public final class Stroke {
     private final Game game;
     private final GamePlayer gamePlayer;
     private final Vec3i ballVector;
