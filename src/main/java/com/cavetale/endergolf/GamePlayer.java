@@ -34,6 +34,7 @@ public final class GamePlayer {
     private Vector ballVelocity; // debugging
     // Finished
     private Instant finishedSince;
+    private boolean winner;
 
     public enum State {
         INIT,

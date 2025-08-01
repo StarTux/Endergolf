@@ -1,8 +1,11 @@
 package com.cavetale.endergolf;
 
 import com.cavetale.core.command.AbstractCommand;
+import com.cavetale.core.command.CommandArgCompleter;
+import com.cavetale.core.command.CommandNode;
 import com.cavetale.core.command.CommandWarn;
 import com.cavetale.core.event.minigame.MinigameMatchType;
+import com.cavetale.core.playercache.PlayerCache;
 import com.winthier.creative.BuildWorld;
 import java.util.ArrayList;
 import java.util.List;
@@ -10,6 +13,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import static net.kyori.adventure.text.Component.text;
+import static net.kyori.adventure.text.Component.textOfChildren;
 import static net.kyori.adventure.text.format.NamedTextColor.*;
 
 public final class EndergolfAdminCommand extends AbstractCommand<EndergolfPlugin> {
@@ -29,6 +33,28 @@ public final class EndergolfAdminCommand extends AbstractCommand<EndergolfPlugin
         rootNode.addChild("stop").denyTabCompletion()
             .description("Stop current game")
             .playerCaller(this::stop);
+        rootNode.addChild("event").arguments("true|false")
+            .completers(CommandArgCompleter.BOOLEAN)
+            .description("Set event mode")
+            .senderCaller(this::event);
+        rootNode.addChild("pause").arguments("true|false")
+            .completers(CommandArgCompleter.BOOLEAN)
+            .description("Set pause mode")
+            .senderCaller(this::pause);
+        // Score
+        CommandNode score = rootNode.addChild("score")
+            .description("Score subcommands");
+        score.addChild("clear").denyTabCompletion()
+            .description("Clear scores")
+            .senderCaller(this::scoreClear);
+        score.addChild("add").arguments("<player> <amount>")
+            .completers(CommandArgCompleter.PLAYER_CACHE,
+                        CommandArgCompleter.integer(i -> true))
+            .description("Add score highscore")
+            .senderCaller(this::scoreAdd);
+        score.addChild("reward").denyTabCompletion()
+            .description("Give out trophy rewards")
+            .senderCaller(this::scoreReward);
     }
 
     private List<String> listWorldPaths() {
@@ -75,5 +101,55 @@ public final class EndergolfAdminCommand extends AbstractCommand<EndergolfPlugin
         }
         game.setFinished(true);
         player.sendMessage(text("Trying to stop game...", YELLOW));
+    }
+
+    private boolean event(CommandSender sender, String[] args) {
+        if (args.length > 1) return false;
+        if (args.length == 1) {
+            plugin.getSaveTag().setEvent(CommandArgCompleter.requireBoolean(args[0]));
+            plugin.saveSaveTag();
+        }
+        sender.sendMessage(textOfChildren(text("Event mode: ", YELLOW),
+                                          (plugin.getSaveTag().isEvent()
+                                           ? text("Yes", GREEN)
+                                           : text("No", RED))));
+        return true;
+    }
+
+    private boolean pause(CommandSender sender, String[] args) {
+        if (args.length > 1) return false;
+        if (args.length == 1) {
+            plugin.getSaveTag().setPause(CommandArgCompleter.requireBoolean(args[0]));
+            plugin.saveSaveTag();
+        }
+        sender.sendMessage(textOfChildren(text("Pause mode: ", YELLOW),
+                                          (plugin.getSaveTag().isPause()
+                                           ? text("Yes", GREEN)
+                                           : text("No", RED))));
+        return true;
+    }
+
+    private void scoreClear(CommandSender sender) {
+        plugin.getSaveTag().getScores().clear();
+        plugin.saveSaveTag();
+        plugin.computeHighscore();
+        sender.sendMessage(text("Scores cleared", YELLOW));
+    }
+
+    private boolean scoreAdd(CommandSender sender, String[] args) {
+        if (args.length != 2) return false;
+        final PlayerCache target = CommandArgCompleter.requirePlayerCache(args[0]);
+        final int amount = CommandArgCompleter.requireInt(args[1], i -> true);
+        plugin.getSaveTag().addScore(target.uuid, amount);
+        plugin.saveSaveTag();
+        plugin.computeHighscore();
+        sender.sendMessage(text("Score changed: " + target.name + ", " + amount, AQUA));
+        return true;
+    }
+
+    private void scoreReward(CommandSender sender) {
+        plugin.computeHighscore();
+        final int count = plugin.rewardHighscore();
+        sender.sendMessage(text(count + " scores rewarded", YELLOW));
     }
 }

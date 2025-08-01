@@ -1,6 +1,7 @@
 package com.cavetale.endergolf;
 
 import com.cavetale.core.event.hud.PlayerHudEvent;
+import com.cavetale.core.event.hud.PlayerHudPriority;
 import lombok.RequiredArgsConstructor;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -46,6 +47,10 @@ public final class GameListener implements Listener {
 
     @EventHandler
     private void onPlayerHud(PlayerHudEvent event) {
+        if (plugin.getSaveTag().isEvent() && event.getPlayer().getWorld().equals(Bukkit.getWorlds().get(0))) {
+            event.sidebar(PlayerHudPriority.HIGH, plugin.getHighscoreLines());
+            return;
+        }
         final Game game = Game.in(event.getPlayer().getWorld());
         if (game == null) return;
         game.onPlayerHud(event);

@@ -4,6 +4,8 @@ import com.cavetale.area.struct.Area;
 import com.cavetale.area.struct.AreasFile;
 import com.cavetale.core.event.hud.PlayerHudEvent;
 import com.cavetale.core.event.hud.PlayerHudPriority;
+import com.cavetale.core.event.minigame.MinigameMatchCompleteEvent;
+import com.cavetale.core.event.minigame.MinigameMatchType;
 import com.cavetale.core.struct.Cuboid;
 import com.cavetale.core.struct.Vec2i;
 import com.cavetale.core.struct.Vec3i;
@@ -27,6 +29,9 @@ import java.util.function.Consumer;
 import lombok.Data;
 import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.JoinConfiguration;
+import net.kyori.adventure.title.Title;
+import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
 import org.bukkit.Difficulty;
 import org.bukkit.GameMode;
@@ -54,8 +59,11 @@ import static com.cavetale.core.font.Unicode.tiny;
 import static io.papermc.paper.datacomponent.item.ItemLore.lore;
 import static io.papermc.paper.datacomponent.item.LodestoneTracker.lodestoneTracker;
 import static net.kyori.adventure.text.Component.empty;
+import static net.kyori.adventure.text.Component.join;
+import static net.kyori.adventure.text.Component.space;
 import static net.kyori.adventure.text.Component.text;
 import static net.kyori.adventure.text.Component.textOfChildren;
+import static net.kyori.adventure.text.JoinConfiguration.separator;
 import static net.kyori.adventure.text.format.NamedTextColor.*;
 import static net.kyori.adventure.text.format.TextDecoration.*;
 import static net.kyori.adventure.title.Title.Times.times;
@@ -295,6 +303,7 @@ public final class Game {
             }
             break;
         case END:
+            determineWinners();
             endStart = now;
             endSeconds = 30L;
             endStop = now.plus(Duration.ofSeconds(endSeconds));
@@ -506,10 +515,10 @@ public final class Game {
         final Duration remainingStrokeTime = Duration.between(now, stroke.getEndTime());
         gp.setStrokeProgress((float) remainingStrokeTime.toMillis() / (float) totalStrokeTime.toMillis());
         if (now.isAfter(stroke.getEndTime())) {
+            // Timeout
             stroke.disable();
             gp.setStroke(null);
             gp.setPlaying(false);
-            gp.setFinished(true);
             gp.setObsolete(true);
             gp.setState(GamePlayer.State.OBSOLETE);
             player.showTitle(title(text("Timeout", DARK_RED),
@@ -659,7 +668,7 @@ public final class Game {
     public boolean onBallLand(GamePlayer gp, FallingBlock falling, Block block) {
         final Vec3i blockVector = Vec3i.of(block);
         if (holeArea.contains(blockVector)) {
-            // Hole In (or Out)
+            // Hole In (or Out), Finish
             gp.setFinished(true);
             gp.setBallVector(blockVector);
             gp.setState(GamePlayer.State.FINISH);
@@ -681,7 +690,9 @@ public final class Game {
                                                      text(": "),
                                                      term);
             for (Player p : getPresentPlayers()) {
+                p.sendMessage(empty());
                 p.sendMessage(message);
+                p.sendMessage(empty());
             }
             final Player player = gp.getPlayer();
             if (player != null) {
@@ -847,5 +858,83 @@ public final class Game {
             if (item == null || item.getType() != Material.COMPASS) continue;
             item.setData(DataComponentTypes.LODESTONE_TRACKER, lodestoneTracker().tracked(true).location(gp.getBallVector().toCenterLocation(world)));
         }
+    }
+
+    public boolean determineWinners() {
+        final List<GamePlayer> finishers = new ArrayList<>();
+        for (GamePlayer gp : players.values()) {
+            if (gp.isFinished()) finishers.add(gp);
+        }
+        if (finishers.isEmpty()) return false;
+        finishers.sort(Comparator.comparing(GamePlayer::getStrokeCount));
+        final int minStrokeCount = finishers.get(0).getStrokeCount();
+        final List<GamePlayer> winners = new ArrayList<>();
+        for (GamePlayer gp : finishers) {
+            if (gp.getStrokeCount() == minStrokeCount) {
+                winners.add(gp);
+            }
+            plugin.getLogger().info("[" + getWorldName() + "] Final Strokes: " + gp.getStrokeCount() + " " + gp.getName());
+        }
+        winners.sort(Comparator.comparing(GamePlayer::getName));
+        // Announce
+        final List<Component> winnerNames = new ArrayList<>(winners.size());
+        for (GamePlayer gp : winners) winnerNames.add(text(gp.getName(), WHITE));
+        final Component announcement;
+        final Title title;
+        if (winnerNames.size() == 1) {
+            announcement = textOfChildren(winnerNames.get(0), text(" wins the game!", GREEN));
+            title = title(winnerNames.get(0),
+                          text("Wins the Game!", GREEN),
+                          times(Duration.ofSeconds(1),
+                                Duration.ofSeconds(4),
+                                Duration.ofSeconds(1)));
+        } else {
+            announcement = join(JoinConfiguration.builder()
+                                .separator(text(", ", GREEN))
+                                .lastSeparator(text(" and ", GREEN))
+                                .suffix(text(" win the game!", GREEN)),
+                                winnerNames);
+            title = title(text("Winners", GREEN),
+                          join(separator(space()), winnerNames),
+                          times(Duration.ofSeconds(1),
+                                Duration.ofSeconds(3),
+                                Duration.ofSeconds(1)));
+        }
+        for (Player player : getPresentPlayers()) {
+            player.sendMessage(empty());
+            player.sendMessage(announcement);
+            player.sendMessage(empty());
+            player.showTitle(title);
+            player.playSound(player, Sound.ENTITY_ENDER_DRAGON_DEATH, 0.5f, 2f);
+        }
+        // Call event
+        final MinigameMatchCompleteEvent event = new MinigameMatchCompleteEvent(MinigameMatchType.ENDERGOLF);
+        for (GamePlayer gp : finishers) event.addPlayerUuid(gp.getUuid());
+        for (GamePlayer gp : winners) event.addWinnerUuid(gp.getUuid());
+        event.callEvent();
+        // Event
+        int bonus = 3;
+        if (plugin.getSaveTag().isEvent()) {
+            int lastStrokes = finishers.get(0).getStrokeCount();
+            final List<String> commandNames = new ArrayList<>();
+            for (GamePlayer gp : finishers) {
+                commandNames.add(gp.getName());
+                plugin.getSaveTag().addScore(gp.getUuid(), 1);
+                if (lastStrokes != gp.getStrokeCount()) {
+                    bonus -= 1;
+                    lastStrokes = gp.getStrokeCount();
+                }
+                if (bonus > 0) {
+                    plugin.getLogger().info("[" + getWorldName() + " Bonus score: " + bonus + " " + gp.getName());
+                    plugin.getSaveTag().addScore(gp.getUuid(), bonus);
+                }
+            }
+            plugin.computeHighscore();
+            final String command = "ml add " + String.join(" ", commandNames);
+            plugin.getLogger().info("[" + getWorldName() + " Issuing console command: " + command);
+            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command);
+        }
+        // End
+        return true;
     }
 }
