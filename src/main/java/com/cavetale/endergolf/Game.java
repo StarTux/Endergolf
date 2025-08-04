@@ -9,6 +9,7 @@ import com.cavetale.core.event.minigame.MinigameMatchType;
 import com.cavetale.core.struct.Cuboid;
 import com.cavetale.core.struct.Vec2i;
 import com.cavetale.core.struct.Vec3i;
+import com.cavetale.magicmap.event.MagicMapCursorEvent;
 import com.cavetale.mytems.Mytems;
 import com.cavetale.mytems.util.Entities;
 import com.winthier.creative.BuildWorld;
@@ -51,6 +52,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.map.MapCursor;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.util.BoundingBox;
 import org.bukkit.util.RayTraceResult;
@@ -90,6 +92,7 @@ public final class Game {
     private State state = State.INIT;
     private Vec3i teeVector;
     private Cuboid holeArea;
+    private Location holeLocation;
     private int par;
     private int totalPlaying;
     private int totalNotFinished;
@@ -192,6 +195,8 @@ public final class Game {
             throw new IllegalStateException("World not loaded");
         }
         loadAreas();
+        final Vec3i holeCenter = holeArea.getCenter();
+        holeLocation = holeCenter.toCenterFloorLocation(world);
         // Force load all chunks
         final Set<Vec2i> forceLoadedChunks = new HashSet<>();
         forceLoadedChunks.add(teeVector.blockToChunk());
@@ -201,17 +206,17 @@ public final class Game {
         }
         plugin.getLogger().info("[" + getWorldName() + "] Force loading " + forceLoadedChunks.size() + " chunks");
         for (Vec2i c : forceLoadedChunks) {
-            world.getChunkAtAsync(c.x, c.z, (Consumer<Chunk>) chunk -> chunk.setForceLoaded(true));
+            world.getChunkAtAsync(c.x, c.z, (Consumer<Chunk>) chunk -> chunk.addPluginChunkTicket(plugin));
         }
-        final Vec3i holeCenter = holeArea.getCenter();
         final Vec2i holeChunk = holeCenter.blockToChunk();
         world.getChunkAtAsync(holeChunk.x, holeChunk.z, (Consumer<Chunk>) chunk -> {
-                final Location location = holeCenter.toCenterFloorLocation(world);
-                world.spawn(location, ArmorStand.class, e -> {
+                holeLocation.setYaw(180f); // MagicMap Icon
+                world.spawn(holeLocation, ArmorStand.class, e -> {
                         e.setInvisible(true);
                         e.setGravity(false);
                         e.getAttribute(Attribute.WAYPOINT_TRANSMIT_RANGE).setBaseValue(60.000);
                     });
+                chunk.addPluginChunkTicket(plugin);
             });
         // Compute distance and par
         final int distance = (int) Math.round(teeVector.distance(holeArea.getCenter()));
@@ -231,7 +236,7 @@ public final class Game {
             }
             gp.setBallVector(teeVector);
             gp.setDistance(distance);
-            teleport(player, world.getSpawnLocation());
+            teleport(player, directAtHole(world.getSpawnLocation()));
             player.getInventory().clear();
             player.setGameMode(GameMode.SPECTATOR);
             player.getAttribute(Attribute.WAYPOINT_TRANSMIT_RANGE).setBaseValue(0.0);
@@ -256,9 +261,7 @@ public final class Game {
 
     public void disable() {
         if (world != null) {
-            for (Chunk chunk : world.getForceLoadedChunks()) {
-                chunk.setForceLoaded(false);
-            }
+            world.removePluginChunkTickets(plugin);
             for (Player player : world.getPlayers()) {
                 plugin.warpToLobby(player);
             }
@@ -382,7 +385,7 @@ public final class Game {
                 gp.setState(GamePlayer.State.STROKE);
                 final Player player = gp.getPlayer();
                 if (player.getGameMode() == GameMode.SPECTATOR) {
-                    teleport(player, gp.getBallVector().toCenterFloorLocation(world).add(0.0, 1.0, 0.0));
+                    teleport(player, directAtHole(gp.getBallVector().toCenterFloorLocation(world).add(0.0, 1.0, 0.0)));
                     player.setGameMode(GameMode.ADVENTURE);
                     player.getInventory().clear();
                     for (GolfClub club : GolfClub.values()) {
@@ -538,8 +541,7 @@ public final class Game {
         }
         final GolfClub club = GolfClub.ofMaterial(player.getInventory().getItemInMainHand().getType());
         if (club == null) return;
-        Vector velocity = getStrokeDirection(rayTrace.getHitPosition(), stroke.getBallVector())
-            .multiply(club.getStrength());
+        final Vector velocity = getBallVelocity(rayTrace.getHitPosition(), stroke.getBallVector(), club, gp.getGroundType());
         Location location = stroke.getBallVector().toCenterFloorLocation(world);
         for (int i = 0; i < 100; i += 1) {
             player.spawnParticle(Particle.CURRENT_DOWN, location, 1, 0.0, 0.0, 0.0, 0.0);
@@ -583,6 +585,12 @@ public final class Game {
         player.setVelocity(new Vector());
     }
 
+    public Location directAtHole(Location location) {
+        final Vector direction = holeLocation.toVector().subtract(location.toVector());
+        location.setDirection(direction);
+        return location;
+    }
+
     public void onPlayerInteract(PlayerInteractEvent event) {
         if (event.hasBlock() && event.getAction() == Action.RIGHT_CLICK_BLOCK && event.getClickedBlock().getType() == Material.DRAGON_EGG) {
             event.setCancelled(true);
@@ -623,8 +631,7 @@ public final class Game {
         gp.setStroke(null);
         gp.setState(GamePlayer.State.FLIGHT);
         gp.setStrokeCount(gp.getStrokeCount() + 1);
-        final Vector velocity = getStrokeDirection(rayTrace.getHitPosition(), clickVector)
-            .multiply(club.getStrength());
+        final Vector velocity = getBallVelocity(rayTrace.getHitPosition(), clickVector, club, gp.getGroundType());
         final Location ballLocation = clickVector.toCenterFloorLocation(world);
         gp.setFlightBall(spawnBall(ballLocation, velocity));
         gp.setBallVelocity(velocity);
@@ -671,6 +678,7 @@ public final class Game {
             // Hole In (or Out), Finish
             gp.setFinished(true);
             gp.setBallVector(blockVector);
+            gp.setBounceVector(null);
             gp.setState(GamePlayer.State.FINISH);
             gp.setFinishedSince(now);
             falling.remove();
@@ -712,7 +720,10 @@ public final class Game {
             return false;
         }
         final GroundType ground = GroundType.at(block);
+        final double bounceY = gp.getBallVelocity().getY() * -1 * ground.getBounciness();
         if (ground.isReset()) {
+            // Return to sender
+            plugin.getLogger().info("[" + getWorldName() + "] " + gp.getName() + " reset at " + blockVector);
             gp.setFlightBall(null);
             gp.setState(GamePlayer.State.WAIT);
             gp.setWaitingSince(now);
@@ -740,8 +751,12 @@ public final class Game {
                 }
             }
             return false;
-        } else {
+        } else if (bounceY < 0.05 || blockVector.equals(gp.getBounceVector())) {
+            // Land for real
+            plugin.getLogger().info("[" + getWorldName() + "] " + gp.getName() + " land at " + blockVector);
+            final int distance = (int) Math.round(blockVector.distance(gp.getBallVector()));
             gp.setBallVector(blockVector);
+            gp.setBounceVector(null);
             gp.setDistance((int) Math.round(gp.getBallVector().distance(holeArea.getCenter())));
             gp.setFlightBall(null);
             gp.setState(GamePlayer.State.WAIT);
@@ -751,9 +766,10 @@ public final class Game {
             if (player != null) {
                 updateBallCompass(player, gp);
                 player.sendMessage(textOfChildren(text("Your ball landed in the ", WHITE),
-                                                  ground.getDisplayComponent()));
-                player.showTitle(title(empty(),
-                                       ground.getDisplayComponent(),
+                                                  ground.getDisplayComponent(),
+                                                  text(" " + distance + " yard" + (distance == 1 ? "" : "s") + " away", WHITE)));
+                player.showTitle(title(ground.getDisplayComponent(),
+                                       textOfChildren(text("distance ", GRAY), text(distance, ground.getColor()), text(" yard" + (distance == 1 ? "" : "s"), GRAY)),
                                        times(Duration.ZERO,
                                              Duration.ofSeconds(1),
                                              Duration.ofSeconds(2))));
@@ -765,6 +781,25 @@ public final class Game {
                 : block.getRelative(0, -1, 0).getType();
             world.spawnParticle(Particle.BLOCK, block.getLocation().add(0.5, 0.5, 0.5), 32, 0.4, 0.125, 0.4, 0.0, mat.createBlockData());
             return true;
+        } else {
+            // Bounce
+            plugin.getLogger().info("[" + getWorldName() + "] " + gp.getName() + " bounce at " + blockVector + " by=" + bounceY);
+            Vector newVelocity = gp.getBallVelocity().clone();
+            newVelocity.setY(bounceY);
+            gp.setBounceVector(blockVector);
+            final FallingBlock newBall = spawnBall(falling.getLocation(), newVelocity);
+            gp.setFlightBall(newBall);
+            gp.setBallVelocity(newVelocity);
+            final Player player = gp.getPlayer();
+            if (player != null) {
+                player.playSound(player, Sound.BLOCK_STONE_HIT, SoundCategory.MASTER, 1f, 1f);
+                player.playSound(player, Sound.BLOCK_SAND_HIT, SoundCategory.MASTER, 1f, 1f);
+                final Material mat = !block.isEmpty()
+                    ? block.getType()
+                    : block.getRelative(0, -1, 0).getType();
+                world.spawnParticle(Particle.BLOCK, block.getLocation().add(0.5, 0.5, 0.5), 16, 0.4, 0.125, 0.4, 0.0, mat.createBlockData());
+            }
+            return false;
         }
     }
 
@@ -776,10 +811,26 @@ public final class Game {
      * @param ballVector the block coordinates of the ball
      * @return the direction as a unit vector
      */
-    public Vector getStrokeDirection(Vector hitPoint, Vec3i ballVector) {
+    public Vector getBallVelocity(Vector hitPoint, Vec3i ballVector, GolfClub club, GroundType ground) {
         final Vector ballCenter = ballVector.toVector().add(new Vector(0.5, 1.125, 0.5));
-        final Vector difference = ballCenter.subtract(hitPoint);
-        return difference.normalize();
+        final Vector direction = ballCenter.subtract(hitPoint).normalize();
+        final double timeFactor = 0.5 * (Math.sin(((double) System.currentTimeMillis()) * 0.002) + 1.0);
+        final double strength = club.getStrength() - (timeFactor * club.getStrengthFactor());
+        switch (ground) {
+        case ROUGH:
+        case HARDPAN:
+        case SAND:
+        case MUD:
+            return direction.multiply(strength * 0.5);
+        case ROCKS:
+        case TEE:
+        case GREEN:
+            return direction.multiply(strength);
+        case LAVA:
+        case WATER:
+        default:
+            throw new IllegalArgumentException("ground=" + ground);
+        }
     }
 
     public FallingBlock spawnBall(Location location, Vector velocity) {
@@ -833,10 +884,26 @@ public final class Game {
         player.getAttribute(Attribute.WAYPOINT_TRANSMIT_RANGE).setBaseValue(0.0);
     }
 
+    public void onMagicMapCursor(MagicMapCursorEvent event) {
+        if (holeLocation != null) {
+            event.addCursor(MapCursor.Type.BANNER_WHITE, holeLocation, text("hole"));
+        }
+        final GamePlayer gp = getGamePlayer(event.getPlayer());
+        if (gp != null && gp.isPlaying()) {
+            final Location ballLocation;
+            if (gp.getState() == GamePlayer.State.FLIGHT && gp.getFlightBall() != null) {
+                ballLocation = gp.getFlightBall().getLocation();
+            } else {
+                ballLocation = gp.getBallVector().toCenterFloorLocation(world);
+            }
+            event.addCursor(MapCursor.Type.PLAYER_OFF_LIMITS, ballLocation, text("ball"));
+        }
+    }
+
     public void onPlayerUseCompass(Player player) {
         final GamePlayer gp = getGamePlayer(player);
         if (gp == null || !gp.isPlaying() || gp.isFinished()) return;
-        teleport(player, gp.getBallVector().toCenterFloorLocation(world).add(0.0, 1.0, 0.0));
+        teleport(player, directAtHole(gp.getBallVector().toCenterFloorLocation(world).add(0.0, 1.0, 0.0)));
         player.playSound(player, Sound.ENTITY_ENDERMAN_TELEPORT, SoundCategory.MASTER, 1f, 1f);
     }
 

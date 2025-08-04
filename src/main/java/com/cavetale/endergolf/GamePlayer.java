@@ -18,6 +18,7 @@ public final class GamePlayer {
     private boolean finished;
     private boolean obsolete;
     private State state = State.INIT;
+    private Vec3i bounceVector;
     private Vec3i ballVector;
     private int distance;
     // Wait

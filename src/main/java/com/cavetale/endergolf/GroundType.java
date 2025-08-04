@@ -15,17 +15,18 @@ import static net.kyori.adventure.text.format.TextColor.color;
 @Getter
 @RequiredArgsConstructor
 public enum GroundType {
-    TEE(NamedTextColor.GOLD),
-    GREEN(NamedTextColor.GREEN), // perfect, aka Fairway
-    ROUGH(NamedTextColor.DARK_GREEN), // tall grass
-    SAND(NamedTextColor.YELLOW),
-    HARDPAN(color(0xf4a460)), // dirt
-    ROCKS(NamedTextColor.GRAY), // stone
-    MUD(color(0xa52a2a)),
-    WATER(NamedTextColor.BLUE),
-    LAVA(NamedTextColor.DARK_RED),
+    TEE(0, NamedTextColor.GOLD),
+    GREEN(0.5, NamedTextColor.GREEN), // perfect, aka Fairway
+    ROUGH(0, NamedTextColor.DARK_GREEN), // tall grass
+    SAND(0, NamedTextColor.YELLOW),
+    HARDPAN(0.25, color(0xf4a460)), // dirt
+    ROCKS(0.25, NamedTextColor.GRAY), // stone
+    MUD(0, color(0xa52a2a)),
+    WATER(0, NamedTextColor.BLUE),
+    LAVA(0, NamedTextColor.DARK_RED),
     ;
 
+    private final double bounciness;
     private final TextColor color;
 
     public String getDisplayName() {

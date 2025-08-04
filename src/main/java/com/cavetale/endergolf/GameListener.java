@@ -2,6 +2,7 @@ package com.cavetale.endergolf;
 
 import com.cavetale.core.event.hud.PlayerHudEvent;
 import com.cavetale.core.event.hud.PlayerHudPriority;
+import com.cavetale.magicmap.event.MagicMapCursorEvent;
 import lombok.RequiredArgsConstructor;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -68,5 +69,12 @@ public final class GameListener implements Listener {
         final Game game = Game.in(event.getPlayer().getWorld());
         if (game == null) return;
         game.onPlayerJoin(event.getPlayer());
+    }
+
+    @EventHandler
+    private void onMagicMapCursor(MagicMapCursorEvent event) {
+        final Game game = Game.in(event.getPlayer().getWorld());
+        if (game == null) return;
+        game.onMagicMapCursor(event);
     }
 }
