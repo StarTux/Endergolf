@@ -72,6 +72,9 @@ public final class EndergolfAdminCommand extends AbstractCommand<EndergolfPlugin
             throw new CommandWarn("Not an Endergolf world: " + args[0]);
         }
         final Game game = new Game(plugin, buildWorld);
+        if (sender instanceof Player player) {
+            game.setLogTarget(player.getUniqueId());
+        }
         for (Player player : Bukkit.getWorlds().get(0).getPlayers()) {
             game.addPlayer(player);
         }

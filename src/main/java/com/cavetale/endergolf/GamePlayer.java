@@ -44,6 +44,7 @@ public final class GamePlayer {
         STROKE,
         FLIGHT,
         FINISH,
+        DNF, // way over par
         OBSOLETE,
         ;
     }

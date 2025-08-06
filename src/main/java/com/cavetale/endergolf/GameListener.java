@@ -14,6 +14,7 @@ import org.bukkit.event.entity.EntityChangeBlockEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.world.ChunkLoadEvent;
 
 @RequiredArgsConstructor
 public final class GameListener implements Listener {
@@ -76,5 +77,12 @@ public final class GameListener implements Listener {
         final Game game = Game.in(event.getPlayer().getWorld());
         if (game == null) return;
         game.onMagicMapCursor(event);
+    }
+
+    @EventHandler
+    private void onChunkLoad(ChunkLoadEvent event) {
+        final Game game = Game.in(event.getWorld());
+        if (game == null) return;
+        game.scanChunk(event.getChunk());
     }
 }

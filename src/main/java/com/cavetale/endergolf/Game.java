@@ -46,6 +46,9 @@ import org.bukkit.Tag;
 import org.bukkit.World;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockState;
+import org.bukkit.block.Sign;
+import org.bukkit.block.sign.Side;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.FallingBlock;
 import org.bukkit.entity.Player;
@@ -68,6 +71,7 @@ import static net.kyori.adventure.text.Component.textOfChildren;
 import static net.kyori.adventure.text.JoinConfiguration.separator;
 import static net.kyori.adventure.text.format.NamedTextColor.*;
 import static net.kyori.adventure.text.format.TextDecoration.*;
+import static net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText;
 import static net.kyori.adventure.title.Title.Times.times;
 import static net.kyori.adventure.title.Title.title;
 
@@ -88,6 +92,7 @@ public final class Game {
     private World world;
     private final List<Cuboid> forceLoadedAreas = new ArrayList<>();
     private final Map<UUID, GamePlayer> players = new HashMap<>();
+    private final Set<Vec2i> scannedChunks = new HashSet<>();
     private boolean finished;
     private State state = State.INIT;
     private Vec3i teeVector;
@@ -96,6 +101,7 @@ public final class Game {
     private int par;
     private int totalPlaying;
     private int totalNotFinished;
+    private UUID logTarget;
     // Updated in tick()
     private Instant now;
     // Countdown
@@ -190,11 +196,34 @@ public final class Game {
         }
     }
 
+    public boolean ifLogPlayer(Consumer<Player> callback) {
+        if (logTarget == null) return false;
+        final Player player = Bukkit.getPlayer(logTarget);
+        if (player == null) return false;
+        callback.accept(player);
+        return true;
+    }
+
+    public void log(String msg) {
+        plugin.getLogger().info("[" + getWorldName() + "] " + msg);
+        ifLogPlayer(p -> p.sendMessage(text("[log] " + msg, YELLOW)));
+    }
+
+    public void warn(String msg) {
+        plugin.getLogger().severe("[" + getWorldName() + "] " + msg);
+        ifLogPlayer(p -> p.sendMessage(text("[log] " + msg, RED)));
+    }
+
     public void enable() {
         if (world == null) {
             throw new IllegalStateException("World not loaded");
         }
-        loadAreas();
+        try {
+            loadAreas();
+        } catch (IllegalStateException ise) {
+            ifLogPlayer(p -> p.sendMessage(text("[log] " + ise.getMessage(), DARK_RED)));
+            throw new IllegalStateException(ise);
+        }
         final Vec3i holeCenter = holeArea.getCenter();
         holeLocation = holeCenter.toCenterFloorLocation(world);
         // Force load all chunks
@@ -204,9 +233,12 @@ public final class Game {
         for (Cuboid forceLoadedArea : forceLoadedAreas) {
             forceLoadedChunks.addAll(forceLoadedArea.blockToChunk().enumerateHorizontally());
         }
-        plugin.getLogger().info("[" + getWorldName() + "] Force loading " + forceLoadedChunks.size() + " chunks");
+        log("Force loading " + forceLoadedChunks.size() + " chunks");
         for (Vec2i c : forceLoadedChunks) {
-            world.getChunkAtAsync(c.x, c.z, (Consumer<Chunk>) chunk -> chunk.addPluginChunkTicket(plugin));
+            world.getChunkAtAsync(c.x, c.z, (Consumer<Chunk>) chunk -> {
+                    chunk.addPluginChunkTicket(plugin);
+                    scanChunk(chunk);
+                });
         }
         final Vec2i holeChunk = holeCenter.blockToChunk();
         world.getChunkAtAsync(holeChunk.x, holeChunk.z, (Consumer<Chunk>) chunk -> {
@@ -217,17 +249,12 @@ public final class Game {
                         e.getAttribute(Attribute.WAYPOINT_TRANSMIT_RANGE).setBaseValue(60.000);
                     });
                 chunk.addPluginChunkTicket(plugin);
+                scanChunk(chunk);
             });
         // Compute distance and par
         final int distance = (int) Math.round(teeVector.distance(holeArea.getCenter()));
         if (par == 0) {
-            if (distance <= 250) {
-                par = 3;
-            } else if (distance <= 470) {
-                par = 4;
-            } else {
-                par = 5;
-            }
+            par = Math.max(3, (distance - 1) / 50 + 1);
         }
         for (GamePlayer gp : List.copyOf(players.values())) {
             final Player player = gp.getPlayer();
@@ -249,6 +276,24 @@ public final class Game {
         setState(State.COUNTDOWN);
     }
 
+    public void scanChunk(Chunk chunk) {
+        final Vec2i vector = Vec2i.of(chunk);
+        if (!scannedChunks.add(vector)) return;
+        for (BlockState blockState : chunk.getTileEntities()) {
+            if (blockState instanceof Sign sign) {
+                final String firstLine = plainText().serialize(sign.getSide(Side.FRONT).line(0));
+                final String secondLine = plainText().serialize(sign.getSide(Side.FRONT).line(1));
+                if (!firstLine.equalsIgnoreCase("[par]")) continue;
+                try {
+                    par = Integer.parseInt(secondLine);
+                } catch (IllegalArgumentException iae) {
+                    warn("Bad par sign: " + secondLine + " at " + Vec3i.of(sign.getBlock()));
+                }
+                log("Setting par to " + par + " via sign at " + Vec3i.of(sign.getBlock()));
+            }
+        }
+    }
+
     public boolean skip() {
         switch (state) {
         case COUNTDOWN:
@@ -261,6 +306,7 @@ public final class Game {
 
     public void disable() {
         if (world != null) {
+            MapReview.stop(world);
             world.removePluginChunkTickets(plugin);
             for (Player player : world.getPlayers()) {
                 plugin.warpToLobby(player);
@@ -275,7 +321,7 @@ public final class Game {
      */
     public void setState(final State newState) {
         final State oldState = this.state;
-        plugin.getLogger().info("[" + getWorldName() + "] State " + oldState + " => " + newState);
+        log("State " + oldState + " => " + newState);
         // Exit
         switch (oldState) {
         default: break;
@@ -368,7 +414,25 @@ public final class Game {
             }
             // Give all waiting players a chance to stroke
             waitingPlayers.sort(Comparator.comparing(GamePlayer::getWaitingSince));
+            final int blowUpCount = Math.max(par + 10, par * 2);
             for (GamePlayer gp : waitingPlayers) {
+                if (gp.getStrokeCount() > blowUpCount) {
+                    gp.setState(GamePlayer.State.DNF);
+                    gp.setFinishedSince(now);
+                    final Player player = gp.getPlayer();
+                    if (player != null) {
+                        player.showTitle(title(text("Blow Up", DARK_RED),
+                                               text("Disqualified", DARK_RED),
+                                               times(Duration.ofSeconds(1),
+                                                     Duration.ofSeconds(3),
+                                                     Duration.ofSeconds(1))));
+                    }
+                    final Component message = text(player.getName() + " had a bad round and was disqualified", DARK_RED);
+                    for (Player p : getPresentPlayers()) {
+                        p.sendMessage(message);
+                    }
+                    continue;
+                }
                 boolean tooClose = false;
                 for (Stroke stroke : strokes) {
                     // Distance must be at least 4
@@ -430,7 +494,7 @@ public final class Game {
             }
             // Remove from game
             if (Duration.between(gp.getOfflineSince(), now).toSeconds() > 60L) {
-                plugin.getLogger().info("[" + getWorldName() + "] Removing " + gp.getName() + " because they have been offline too long");
+                log("Removing " + gp.getName() + " because they have been offline too long");
                 gp.setPlaying(false);
                 gp.setState(GamePlayer.State.SPECTATE);
                 if (gp.getFlightBall() != null) {
@@ -457,6 +521,11 @@ public final class Game {
                 final Vec3i vector = Vec3i.of(lastLocation);
                 if (vector.y <= world.getMinHeight()) {
                     // Void
+                    player.showTitle(title(text("Void", DARK_PURPLE, BOLD),
+                                           text("Your ball fell out of the world", RED),
+                                           times(Duration.ZERO,
+                                                 Duration.ofSeconds(3),
+                                                 Duration.ofSeconds(1))));
                     player.sendMessage(text("Your ball fell out of the world", RED));
                     gp.setState(GamePlayer.State.WAIT);
                     gp.setWaitingSince(now);
@@ -465,8 +534,19 @@ public final class Game {
                     gp.setBallVelocity(null);
                 } else if (!vector.toBlock(world).isEmpty() && !Tag.REPLACEABLE.isTagged(vector.toBlock(world).getType())) {
                     // Non-replaceable block, such as carpet.
-                    if (onBallLand(gp, gp.getFlightBall(), vector.toBlock(world))) {
-                        vector.toBlock(world).setType(Material.DRAGON_EGG, false);
+                    Block block = vector.toBlock(world);
+                    switch (block.getType()) {
+                    case SOUL_SAND:
+                    case SOUL_SOIL:
+                    case FARMLAND:
+                    case DIRT_PATH:
+                    case HONEY_BLOCK:
+                    case SLIME_BLOCK:
+                        block = block.getRelative(0, 1, 0);
+                    default: break;
+                    }
+                    if (onBallLand(gp, gp.getFlightBall(), block)) {
+                        block.setType(Material.DRAGON_EGG, false);
                     }
                 } else {
                     final Location newLocation = vector.toCenterFloorLocation(world);
@@ -492,7 +572,7 @@ public final class Game {
                 }
             }
             break;
-        case FINISH: {
+        case FINISH: case DNF: {
             final Duration finishTime = Duration.between(gp.getFinishedSince(), now);
             if (finishTime.toSeconds() >= 5) {
                 mapReview.remindOnce(player);
@@ -529,7 +609,7 @@ public final class Game {
                                    times(Duration.ofSeconds(1),
                                          Duration.ofSeconds(3),
                                          Duration.ofSeconds(1))));
-            final Component message = text(player.getName() + " timed out and are disqualified", DARK_RED);
+            final Component message = text(player.getName() + " timed out and was disqualified", DARK_RED);
             for (Player p : getPresentPlayers()) {
                 p.sendMessage(message);
             }
@@ -684,7 +764,7 @@ public final class Game {
             falling.remove();
             gp.setFlightBall(null);
             final int strokes = gp.getStrokeCount();
-            plugin.getLogger().info("[" + getWorldName() + "] " + gp.getName()
+            log("" + gp.getName()
                                     + " finished with " + strokes + "/" + par + " strokes: "
                                     + gp.getPerformanceString());
             final Component term = GolfScoringTerm.getComponent(strokes, par);
@@ -723,7 +803,7 @@ public final class Game {
         final double bounceY = gp.getBallVelocity().getY() * -1 * ground.getBounciness();
         if (ground.isReset()) {
             // Return to sender
-            plugin.getLogger().info("[" + getWorldName() + "] " + gp.getName() + " reset at " + blockVector);
+            log("" + gp.getName() + " reset at " + blockVector);
             gp.setFlightBall(null);
             gp.setState(GamePlayer.State.WAIT);
             gp.setWaitingSince(now);
@@ -751,9 +831,9 @@ public final class Game {
                 }
             }
             return false;
-        } else if (bounceY < 0.05 || blockVector.equals(gp.getBounceVector())) {
+        } else if (bounceY < 0.1 || blockVector.equals(gp.getBounceVector())) {
             // Land for real
-            plugin.getLogger().info("[" + getWorldName() + "] " + gp.getName() + " land at " + blockVector);
+            log("" + gp.getName() + " land at " + blockVector);
             final int distance = (int) Math.round(blockVector.distance(gp.getBallVector()));
             gp.setBallVector(blockVector);
             gp.setBounceVector(null);
@@ -783,7 +863,7 @@ public final class Game {
             return true;
         } else {
             // Bounce
-            plugin.getLogger().info("[" + getWorldName() + "] " + gp.getName() + " bounce at " + blockVector + " by=" + bounceY);
+            log("" + gp.getName() + " bounce at " + blockVector + " by=" + bounceY);
             Vector newVelocity = gp.getBallVelocity().clone();
             newVelocity.setY(bounceY);
             gp.setBounceVector(blockVector);
@@ -812,25 +892,22 @@ public final class Game {
      * @return the direction as a unit vector
      */
     public Vector getBallVelocity(Vector hitPoint, Vec3i ballVector, GolfClub club, GroundType ground) {
+        final double millis = (double) (System.nanoTime() / 1_000_000L);
         final Vector ballCenter = ballVector.toVector().add(new Vector(0.5, 1.125, 0.5));
-        final Vector direction = ballCenter.subtract(hitPoint).normalize();
-        final double timeFactor = 0.5 * (Math.sin(((double) System.currentTimeMillis()) * 0.002) + 1.0);
-        final double strength = club.getStrength() - (timeFactor * club.getStrengthFactor());
-        switch (ground) {
-        case ROUGH:
-        case HARDPAN:
-        case SAND:
-        case MUD:
-            return direction.multiply(strength * 0.5);
-        case ROCKS:
-        case TEE:
-        case GREEN:
-            return direction.multiply(strength);
-        case LAVA:
-        case WATER:
-        default:
-            throw new IllegalArgumentException("ground=" + ground);
+        Vector direction = ballCenter.subtract(hitPoint).normalize();
+        if (ground.getWiggle() > 0) {
+            Location location = new Location(world, 0, 0, 0);
+            location.setDirection(direction);
+            final double timef = 0.001;
+            final float scalef = 0.5f * (float) (Math.sin(millis * 0.00125 + 11) + 1) * ground.getWiggleSpeed();
+            location.setYaw(location.getYaw() + (float) Math.cos(millis * timef) * 22.5f * scalef * ground.getWiggle());
+            location.setPitch(location.getPitch() + (float) Math.sin(millis * timef) * 11.25f * scalef * ground.getWiggle());
+            direction = location.getDirection();
         }
+        final double timeFactor = 0.5 * (Math.sin(millis * 0.002) + 1.0);
+        final double strength = (club.getStrength() - (timeFactor * club.getStrengthFactor()))
+            * ground.getStrengthFactor();
+        return direction.multiply(strength);
     }
 
     public FallingBlock spawnBall(Location location, Vector velocity) {
@@ -940,7 +1017,7 @@ public final class Game {
             if (gp.getStrokeCount() == minStrokeCount) {
                 winners.add(gp);
             }
-            plugin.getLogger().info("[" + getWorldName() + "] Final Strokes: " + gp.getStrokeCount() + " " + gp.getName());
+            log("Final Strokes: " + gp.getStrokeCount() + " " + gp.getName());
         }
         winners.sort(Comparator.comparing(GamePlayer::getName));
         // Announce
