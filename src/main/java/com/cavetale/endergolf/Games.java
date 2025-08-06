@@ -1,5 +1,7 @@
 package com.cavetale.endergolf;
 
+import com.cavetale.core.event.minigame.MinigameMatchType;
+import com.winthier.creative.vote.MapVote;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -7,6 +9,7 @@ import java.util.logging.Level;
 import lombok.RequiredArgsConstructor;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
+import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
 
 @RequiredArgsConstructor
@@ -45,7 +48,9 @@ public final class Games {
     }
 
     private void tick() {
+        int activeGameCount = 0;
         for (Game game : List.copyOf(worldGameMap.values())) {
+            activeGameCount += 1;
             if (game.isFinished()) {
                 removeAndDisable(game);
             } else {
@@ -55,6 +60,26 @@ public final class Games {
                     plugin.getLogger().log(Level.SEVERE, "Ticking game " + game.getWorldName(), e);
                     removeAndDisable(game);
                 }
+            }
+        }
+        final World lobbyWorld = Bukkit.getWorlds().get(0);
+        if (MapVote.isActive(MinigameMatchType.ENDERGOLF)) {
+            if (activeGameCount > 0 || plugin.getSaveTag().isPause() || lobbyWorld.getPlayers().size() <= 1) {
+                MapVote.stop(MinigameMatchType.ENDERGOLF);
+            }
+        } else {
+            if (activeGameCount == 0 && !plugin.getSaveTag().isPause() && lobbyWorld.getPlayers().size() > 1) {
+                MapVote.start(MinigameMatchType.ENDERGOLF, mapVote -> {
+                        mapVote.setTitle(plugin.getTitle());
+                        mapVote.setCallback(mapVoteResult -> {
+                                final Game game = new Game(plugin, mapVoteResult.getBuildWorldWinner());
+                                for (Player player : lobbyWorld.getPlayers()) {
+                                    game.addPlayer(player);
+                                }
+                                game.setWorldAndEnable(mapVoteResult.getLocalWorldCopy());
+                            });
+                        mapVote.setLobbyWorld(lobbyWorld);
+                    });
             }
         }
     }

@@ -152,11 +152,13 @@ public final class Game {
         if (world != null) {
             throw new IllegalStateException("[" + getWorldName() + "] World already loaded");
         }
-        buildWorld.makeLocalCopyAsync(loadedWorld -> {
-                world = loadedWorld;
-                prepareWorld();
-                EndergolfPlugin.endergolfPlugin().getGames().addAndEnable(this);
-            });
+        buildWorld.makeLocalCopyAsync(this::setWorldAndEnable);
+    }
+
+    public void setWorldAndEnable(World theWorld) {
+        world = theWorld;
+        prepareWorld();
+        EndergolfPlugin.endergolfPlugin().getGames().addAndEnable(this);
     }
 
     private void prepareWorld() {

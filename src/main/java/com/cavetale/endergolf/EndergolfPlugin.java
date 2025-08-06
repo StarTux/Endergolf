@@ -14,7 +14,8 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.potion.PotionEffect;
 import static net.kyori.adventure.text.Component.text;
-import static net.kyori.adventure.text.format.NamedTextColor.GREEN;
+import static net.kyori.adventure.text.Component.textOfChildren;
+import static net.kyori.adventure.text.format.NamedTextColor.*;
 
 @Getter
 public final class EndergolfPlugin extends JavaPlugin {
@@ -25,6 +26,8 @@ public final class EndergolfPlugin extends JavaPlugin {
     private final Games games = new Games(this);
     private SaveTag saveTag;
     private List<Component> highscoreLines = List.of();
+    private final Component title = textOfChildren(text("Ender", GREEN),
+                                                   text("golf", WHITE));
 
     public EndergolfPlugin() {
         instance = this;
@@ -84,7 +87,7 @@ public final class EndergolfPlugin extends JavaPlugin {
         return Highscore.reward(saveTag.getScores(),
                                 "endergolf",
                                 TrophyCategory.CUP,
-                                text("Endergolf", GREEN),
+                                title,
                                 hi -> "You scored " + hi.score + " point" + (hi.score > 1 ? "s" : ""));
     }
 }
