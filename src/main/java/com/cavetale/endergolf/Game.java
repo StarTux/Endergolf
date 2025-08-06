@@ -465,6 +465,7 @@ public final class Game {
                     }
                     player.getInventory().addItem(makeBallCompass());
                     player.getInventory().setItemInOffHand(Mytems.MAGIC_MAP.createItemStack());
+                    player.getInventory().setBoots(Mytems.SNEAKERS.createItemStack());
                 }
                 updateBallCompass(player, gp);
             }
@@ -486,7 +487,6 @@ public final class Game {
     public static double estimateGravity(final double currentY) {
         return Math.max(-3.92, (currentY - 0.04) * 0.98);
     }
-
 
     public void applyWeather(Vector ballVelocity, GamePlayer gp) {
         final Vector relativeVelocity = gp.getWindVector().clone().subtract(ballVelocity);
@@ -823,6 +823,9 @@ public final class Game {
                                              Duration.ofSeconds(1))));
                 player.playSound(player, Sound.UI_TOAST_CHALLENGE_COMPLETE, SoundCategory.MASTER, 1f, 2f);
             }
+            for (int i = 0; i < 3; i += 1) {
+                Fireworks.spawnFirework(holeLocation);
+            }
             return false;
         }
         final GroundType ground = GroundType.at(block);
@@ -950,14 +953,20 @@ public final class Game {
         sidebar.add(textOfChildren(text(tiny("playing "), GRAY), text(totalNotFinished, WHITE), text("/", DARK_GRAY), text(totalPlaying, WHITE)));
         if (gp != null && gp.isPlaying()) {
             final int strokes = gp.getStrokeCount();
-            sidebar.add(textOfChildren(text(tiny("hole "), GRAY),
+            sidebar.add(textOfChildren(text(tiny("score "), GRAY),
                                        text(strokes, WHITE),
                                        text(tiny(" (par "), GRAY),
                                        text(par, WHITE),
                                        text(")", GRAY)));
             if (!gp.isFinished()) {
-                sidebar.add(textOfChildren(text(tiny("distance "), GRAY), text(gp.getDistance(), WHITE), text(tiny("yd"), DARK_GRAY)));
-                sidebar.add(textOfChildren(text(tiny("ground "), GRAY), gp.getGroundType().getDisplayComponent()));
+                final Location playerEyeLocation = event.getPlayer().getEyeLocation();
+                final Location directionLocation = new Location(world, 0, 0, 0);
+                directionLocation.setDirection(holeLocation.toVector().subtract(playerEyeLocation.toVector()));
+                final Unicode holeArrow = Yaw.yawToArrow(directionLocation.getYaw() - playerEyeLocation.getYaw());
+                sidebar.add(textOfChildren(text(tiny("hole "), GRAY),
+                                           text(gp.getDistance(), WHITE),
+                                           text(tiny("yd"), DARK_GRAY),
+                                           text(" " + holeArrow.getString(), WHITE)));
             }
             switch (gp.getState()) {
             case WAIT:
@@ -972,29 +981,10 @@ public final class Game {
             default: break;
             }
         }
-        if (gp != null && gp.isPlaying()) {
-            final float yaw = Location.normalizeYaw(gp.getWindLocation().getYaw() - event.getPlayer().getYaw());
-            final Unicode arrow;
-            if (yaw < -157.5f) {
-                arrow = Unicode.ARROW_DOWN;
-            } else if (yaw < -112.5f) {
-                arrow = Unicode.ARROW_DOWN_LEFT;
-            } else if (yaw < -67.5f) {
-                arrow = Unicode.ARROW_LEFT;
-            } else if (yaw < -22.5f) {
-                arrow = Unicode.ARROW_UP_LEFT;
-            } else if (yaw < 22.5f) {
-                arrow = Unicode.ARROW_UP;
-            } else if (yaw < 67.5f) {
-                arrow = Unicode.ARROW_UP_RIGHT;
-            } else if (yaw < 112.5f) {
-                arrow = Unicode.ARROW_RIGHT;
-            } else if (yaw < 157.5f) {
-                arrow = Unicode.ARROW_DOWN_RIGHT;
-            } else {
-                arrow = Unicode.ARROW_DOWN;
-            }
-            sidebar.add(textOfChildren(text(tiny("wind "), GRAY), text(arrow.getString(), WHITE), space(), gp.getWindComponent()));
+        if (gp != null && gp.isPlaying() && !gp.isFinished()) {
+            final Unicode arrow = Yaw.yawToArrow(Location.normalizeYaw(gp.getWindLocation().getYaw() - event.getPlayer().getYaw()));
+            sidebar.add(textOfChildren(text(tiny("wind "), GRAY), gp.getWindComponent(), text(" " + arrow.getString(), WHITE)));
+            sidebar.add(textOfChildren(text(tiny("ground "), GRAY), gp.getGroundType().getDisplayComponent()));
         }
         if (state == State.END) {
             sidebar.add(textOfChildren(text(tiny("game over "), GRAY), text(endSeconds, WHITE)));
@@ -1050,7 +1040,7 @@ public final class Game {
     public void updateBallCompass(Player player, GamePlayer gp) {
         for (ItemStack item : player.getInventory()) {
             if (item == null || item.getType() != Material.COMPASS) continue;
-            item.setData(DataComponentTypes.LODESTONE_TRACKER, lodestoneTracker().tracked(true).location(gp.getBallVector().toCenterLocation(world)));
+            item.setData(DataComponentTypes.LODESTONE_TRACKER, lodestoneTracker().tracked(false).location(gp.getBallVector().toCenterLocation(world)));
         }
     }
 

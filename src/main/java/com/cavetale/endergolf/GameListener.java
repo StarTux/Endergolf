@@ -7,10 +7,13 @@ import lombok.RequiredArgsConstructor;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.FallingBlock;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityChangeBlockEvent;
+import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.EntityExhaustionEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
@@ -84,5 +87,25 @@ public final class GameListener implements Listener {
         final Game game = Game.in(event.getWorld());
         if (game == null) return;
         game.scanChunk(event.getChunk());
+    }
+
+    @EventHandler
+    private void onEntityDamage(EntityDamageEvent event) {
+        if (!(event.getEntity() instanceof Player player)) return;
+        event.setCancelled(true);
+        if (event.getCause() == EntityDamageEvent.DamageCause.VOID) {
+            final Game game = Game.in(event.getEntity().getWorld());
+            if (game == null) return;
+            if (game != null) {
+                Bukkit.getScheduler().runTask(plugin, () -> game.teleport(player, game.getWorld().getSpawnLocation()));
+            }
+        }
+    }
+
+    @EventHandler
+    private void onEntityExhaustion(EntityExhaustionEvent event) {
+        if (event.getEntity() instanceof Player) {
+            event.setCancelled(true);
+        }
     }
 }
