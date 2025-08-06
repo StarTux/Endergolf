@@ -297,6 +297,7 @@ public final class Game {
                     warn("Bad par sign: " + secondLine + " at " + Vec3i.of(sign.getBlock()));
                 }
                 log("Setting par to " + par + " via sign at " + Vec3i.of(sign.getBlock()));
+                sign.getBlock().setType(Material.AIR);
             }
         }
     }
