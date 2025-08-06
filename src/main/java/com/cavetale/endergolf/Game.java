@@ -171,25 +171,25 @@ public final class Game {
     private void loadAreas() {
         final AreasFile areasFile = AreasFile.load(world, "Endergolf");
         if (areasFile == null) {
-            throw new IllegalStateException("[" + getWorldName() + "] No Endergolf areas file");
+            throw new IllegalStateException("No Endergolf areas file");
         }
         for (Area area : areasFile.find("tee")) {
             if (teeVector != null) {
-                throw new IllegalStateException("[" + getWorldName() + "] Multiple tee areas");
+                throw new IllegalStateException("Multiple tee areas");
             }
             this.teeVector = area.getMin();
         }
         for (Area area : areasFile.find("hole")) {
             if (holeArea != null) {
-                throw new IllegalStateException("[" + getWorldName() + "] Multiple hole areas");
+                throw new IllegalStateException("Multiple hole areas");
             }
             this.holeArea = area.toCuboid();
         }
         if (teeVector == null) {
-            throw new IllegalStateException("[" + getWorldName() + "] No tee vector");
+            throw new IllegalStateException("No tee vector");
         }
         if (holeArea == null) {
-            throw new IllegalStateException("[" + getWorldName() + "] No hole area");
+            throw new IllegalStateException("No hole area");
         }
         for (Area area : areasFile.find("load")) {
             forceLoadedAreas.add(area.toCuboid());
@@ -222,7 +222,7 @@ public final class Game {
             loadAreas();
         } catch (IllegalStateException ise) {
             ifLogPlayer(p -> p.sendMessage(text("[log] " + ise.getMessage(), DARK_RED)));
-            throw new IllegalStateException(ise);
+            throw new IllegalStateException(getWorldName(), ise);
         }
         final Vec3i holeCenter = holeArea.getCenter();
         holeLocation = holeCenter.toCenterFloorLocation(world);
