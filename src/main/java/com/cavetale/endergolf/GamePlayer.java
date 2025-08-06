@@ -4,10 +4,16 @@ import com.cavetale.core.struct.Vec3i;
 import java.time.Instant;
 import java.util.UUID;
 import lombok.Data;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.entity.FallingBlock;
 import org.bukkit.entity.Player;
 import org.bukkit.util.Vector;
+import static com.cavetale.core.font.Unicode.tiny;
+import static net.kyori.adventure.text.Component.text;
+import static net.kyori.adventure.text.Component.textOfChildren;
+import static net.kyori.adventure.text.format.NamedTextColor.*;
 
 @Data
 public final class GamePlayer {
@@ -36,6 +42,10 @@ public final class GamePlayer {
     // Finished
     private Instant finishedSince;
     private boolean winner;
+    // Wind
+    private Location windLocation;
+    private Vector windVector;
+    private Component windComponent;
 
     public enum State {
         INIT,
@@ -68,5 +78,17 @@ public final class GamePlayer {
         } else {
             return "+" + (strokeCount - par);
         }
+    }
+
+    public void updateWind() {
+        windLocation = new Location(game.getWorld(), 0, 0, 0);
+        windLocation.setPitch(0);
+        final double strength = game.getRandom().nextDouble() * game.getRandom().nextDouble() * 0.55;
+        final float yaw = Location.normalizeYaw(game.getRandom().nextFloat() * 360.0f);
+        windLocation.setYaw(yaw);
+        windVector = windLocation.getDirection().multiply(strength);
+        // Component
+        final int kmh = (int) Math.round(strength * 20.0 * 60.0 * 60.0 * 0.001);
+        windComponent = textOfChildren(text(kmh, WHITE), text(tiny("km/h"), DARK_GRAY));
     }
 }

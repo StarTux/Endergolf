@@ -6,6 +6,7 @@ import com.cavetale.core.event.hud.PlayerHudEvent;
 import com.cavetale.core.event.hud.PlayerHudPriority;
 import com.cavetale.core.event.minigame.MinigameMatchCompleteEvent;
 import com.cavetale.core.event.minigame.MinigameMatchType;
+import com.cavetale.core.font.Unicode;
 import com.cavetale.core.struct.Cuboid;
 import com.cavetale.core.struct.Vec2i;
 import com.cavetale.core.struct.Vec3i;
@@ -24,6 +25,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -102,6 +104,7 @@ public final class Game {
     private int totalPlaying;
     private int totalNotFinished;
     private UUID logTarget;
+    private final Random random = new Random();
     // Updated in tick()
     private Instant now;
     // Countdown
@@ -258,6 +261,7 @@ public final class Game {
         if (par == 0) {
             par = Math.max(3, (distance - 1) / 50 + 1);
         }
+        // Players
         for (GamePlayer gp : List.copyOf(players.values())) {
             final Player player = gp.getPlayer();
             if (player == null) {
@@ -265,6 +269,7 @@ public final class Game {
             }
             gp.setBallVector(teeVector);
             gp.setDistance(distance);
+            gp.updateWind();
             teleport(player, directAtHole(world.getSpawnLocation()));
             player.getInventory().clear();
             player.setGameMode(GameMode.SPECTATOR);
@@ -449,6 +454,7 @@ public final class Game {
                 stroke.enable();
                 gp.setStroke(stroke);
                 gp.setState(GamePlayer.State.STROKE);
+                gp.updateWind();
                 final Player player = gp.getPlayer();
                 if (player.getGameMode() == GameMode.SPECTATOR) {
                     teleport(player, directAtHole(gp.getBallVector().toCenterFloorLocation(world).add(0.0, 1.0, 0.0)));
@@ -481,16 +487,31 @@ public final class Game {
         return Math.max(-3.92, (currentY - 0.04) * 0.98);
     }
 
+
+    public void applyWeather(Vector ballVelocity, GamePlayer gp) {
+        final Vector relativeVelocity = gp.getWindVector().clone().subtract(ballVelocity);
+        final double relativeSpeed = relativeVelocity.length();
+        // 0.00022 is the naturalistic constant
+        final Vector drag = relativeVelocity.normalize().multiply(relativeSpeed * relativeSpeed * 0.05);
+        ballVelocity.add(drag);
+        drag.multiply(20.0);
+        // Rain
+        if (world.hasStorm() && (gp.getFlightBall() == null || gp.getFlightBall().isInRain())) {
+            ballVelocity.setY(ballVelocity.getY() - 0.15);
+        }
+    }
+
     private void tickPlay(GamePlayer gp) {
         final Player player = gp.getPlayer();
         if (player == null) {
             // Player is offline
             // Record offline time
             if (gp.getOfflineSince() == null) {
-                gp.setOfflineSince(Instant.now());
+                gp.setOfflineSince(now);
             }
             // Cancel current stroke if any
             if (gp.getState() == GamePlayer.State.STROKE) {
+                gp.setState(GamePlayer.State.WAIT);
                 gp.getStroke().disable();
                 gp.setStroke(null);
             }
@@ -552,24 +573,24 @@ public final class Game {
                     }
                 } else {
                     final Location newLocation = vector.toCenterFloorLocation(world);
-                    plugin.getLogger().info("[ " + getWorldName() + "] Respawning ball for " + gp.getName() + " at " + vector);
+                    log("Respawning ball for " + gp.getName() + " at " + vector);
                     gp.setFlightBall(spawnBall(newLocation, new Vector()));
                     gp.setBallVelocity(gp.getFlightBall().getVelocity());
                 }
             } else {
                 final Vector oldVelocity = gp.getBallVelocity();
                 final Vector newVelocity = gp.getFlightBall().getVelocity();
+                applyWeather(newVelocity, gp);
+                gp.getFlightBall().setVelocity(newVelocity);
                 gp.setBallVelocity(newVelocity);
                 if (doDebugGravity && gp.getFlightBall().getTicksLived() > 0) {
                     final double estimateY = estimateGravity(oldVelocity.getY());
                     final double diffY = Math.abs(estimateY - newVelocity.getY());
                     if (diffY > 0.01) {
-                        plugin.getLogger().warning(gp.getFlightBall().getTicksLived() + " Estimate wrong: "
-                                                   + oldVelocity.getY() + " => " + newVelocity.getY()
-                                                   + " diff " + (oldVelocity.getY() - newVelocity.getY())
-                                                   + " instead of " + estimateY + " off by " + diffY);
-                    } else {
-                        plugin.getLogger().info("OK");
+                        warn(gp.getFlightBall().getTicksLived() + " Estimate wrong: "
+                             + oldVelocity.getY() + " => " + newVelocity.getY()
+                             + " diff " + (oldVelocity.getY() - newVelocity.getY())
+                             + " instead of " + estimateY + " off by " + diffY);
                     }
                 }
             }
@@ -624,15 +645,18 @@ public final class Game {
         final GolfClub club = GolfClub.ofMaterial(player.getInventory().getItemInMainHand().getType());
         if (club == null) return;
         final Vector velocity = getBallVelocity(rayTrace.getHitPosition(), stroke.getBallVector(), club, gp.getGroundType());
+        final Location playerEyeLocation = player.getEyeLocation();
         Location location = stroke.getBallVector().toCenterFloorLocation(world);
-        for (int i = 0; i < 100; i += 1) {
+        for (int i = 0; i < 100 && location.isChunkLoaded(); i += 1) {
             player.spawnParticle(Particle.CURRENT_DOWN, location, 1, 0.0, 0.0, 0.0, 0.0);
             if (velocity.length() >= 2.0) {
-                Location location2 = location.clone().add(velocity.clone().multiply(0.2));
+                final Location location2 = location.clone().add(velocity.clone().multiply(0.2));
                 player.spawnParticle(Particle.CURRENT_DOWN, location2, 1, 0.0, 0.0, 0.0, 0.0);
             }
             location = location.add(velocity);
+            if (location.distance(playerEyeLocation) > 96.0) break;
             velocity.setY(estimateGravity(velocity.getY()));
+            applyWeather(velocity, gp);
             final Block block = location.getBlock();
             if (!block.isEmpty() && block.getType() != Material.DRAGON_EGG) {
                 final Vector locationVector = location.toVector();
@@ -932,7 +956,7 @@ public final class Game {
                                        text(par, WHITE),
                                        text(")", GRAY)));
             if (!gp.isFinished()) {
-                sidebar.add(textOfChildren(text(tiny("distance "), GRAY), text(gp.getDistance(), WHITE), text("yd", DARK_GRAY)));
+                sidebar.add(textOfChildren(text(tiny("distance "), GRAY), text(gp.getDistance(), WHITE), text(tiny("yd"), DARK_GRAY)));
                 sidebar.add(textOfChildren(text(tiny("ground "), GRAY), gp.getGroundType().getDisplayComponent()));
             }
             switch (gp.getState()) {
@@ -947,6 +971,30 @@ public final class Game {
                 break;
             default: break;
             }
+        }
+        if (gp != null && gp.isPlaying()) {
+            final float yaw = Location.normalizeYaw(gp.getWindLocation().getYaw() - event.getPlayer().getYaw());
+            final Unicode arrow;
+            if (yaw < -157.5f) {
+                arrow = Unicode.ARROW_DOWN;
+            } else if (yaw < -112.5f) {
+                arrow = Unicode.ARROW_DOWN_LEFT;
+            } else if (yaw < -67.5f) {
+                arrow = Unicode.ARROW_LEFT;
+            } else if (yaw < -22.5f) {
+                arrow = Unicode.ARROW_UP_LEFT;
+            } else if (yaw < 22.5f) {
+                arrow = Unicode.ARROW_UP;
+            } else if (yaw < 67.5f) {
+                arrow = Unicode.ARROW_UP_RIGHT;
+            } else if (yaw < 112.5f) {
+                arrow = Unicode.ARROW_RIGHT;
+            } else if (yaw < 157.5f) {
+                arrow = Unicode.ARROW_DOWN_RIGHT;
+            } else {
+                arrow = Unicode.ARROW_DOWN;
+            }
+            sidebar.add(textOfChildren(text(tiny("wind "), GRAY), text(arrow.getString(), WHITE), space(), gp.getWindComponent()));
         }
         if (state == State.END) {
             sidebar.add(textOfChildren(text(tiny("game over "), GRAY), text(endSeconds, WHITE)));
@@ -1071,13 +1119,13 @@ public final class Game {
                     lastStrokes = gp.getStrokeCount();
                 }
                 if (bonus > 0) {
-                    plugin.getLogger().info("[" + getWorldName() + " Bonus score: " + bonus + " " + gp.getName());
+                    log("Bonus score: " + bonus + " " + gp.getName());
                     plugin.getSaveTag().addScore(gp.getUuid(), bonus);
                 }
             }
             plugin.computeHighscore();
             final String command = "ml add " + String.join(" ", commandNames);
-            plugin.getLogger().info("[" + getWorldName() + " Issuing console command: " + command);
+            log("Issuing console command: " + command);
             Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command);
         }
         // End
