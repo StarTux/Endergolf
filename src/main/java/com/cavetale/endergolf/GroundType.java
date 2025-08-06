@@ -19,7 +19,7 @@ public enum GroundType {
     // Easy
     GREEN(1.0, 0.5, 0.125f, 0.5f, NamedTextColor.GREEN), // perfect, aka Fairway
     WOOD(1.0, 0.5, 0.25f, 0.5f, color(0xa47449)),
-    SMOOTH(1.0, 0.75, 0.125f, 0.5f, NamedTextColor.BLUE),
+    SMOOTH(1.0, 0.5, 0.125f, 0.5f, NamedTextColor.BLUE),
     // Medium
     ROUGH(0.8, 0, 0.5f, 1.5f, NamedTextColor.DARK_GREEN), // tall grass
     HARDPAN(0.8, 0.25, 0.25f, 0.5f, color(0xf4a460)), // dirt
@@ -66,7 +66,7 @@ public enum GroundType {
             if (ball == Material.LAVA) {
                 return LAVA;
             }
-            if (ball == Material.DIRT_PATH || ball == Material.FARMLAND) {
+            if (ball == Material.DIRT_PATH || ball == Material.FARMLAND || ball == Material.SNOW) {
                 return MUD;
             }
             if (Tag.REPLACEABLE.isTagged(ball)) {
@@ -77,13 +77,13 @@ public enum GroundType {
         if (floor == Material.GRASS_BLOCK || floor == Material.MOSS_BLOCK || Tag.CONCRETE_POWDER.isTagged(floor) || Tag.WOOL.isTagged(floor)) {
             return GREEN;
         }
-        if (Tag.DIRT.isTagged(floor)) {
+        if (Tag.DIRT.isTagged(floor) || floor == Material.NETHERRACK) {
             return HARDPAN;
         }
         if (Tag.SAND.isTagged(floor) || floor == Material.SOUL_SAND || floor == Material.SOUL_SOIL) {
             return SAND;
         }
-        if (floor == Material.MUD || floor == Material.DIRT_PATH || floor == Material.FARMLAND) {
+        if (floor == Material.MUD || floor == Material.DIRT_PATH || floor == Material.FARMLAND || Tag.SNOW.isTagged(floor)) {
             return MUD;
         }
         if (floor == Material.SLIME_BLOCK || floor == Material.HONEY_BLOCK) {
@@ -95,21 +95,23 @@ public enum GroundType {
             || Tag.TERRACOTTA.isTagged(floor)
             || MaterialTags.CONCRETES.isTagged(floor)
             || MaterialTags.GLAZED_TERRACOTTA.isTagged(floor)
+            || Tag.ICE.isTagged(floor)
             || floor.name().contains("SMOOTH")
-            || floor.name().contains("POLISHED")) {
+            || floor.name().contains("POLISHED")
+            || floor.name().contains("BRICK")) {
             return SMOOTH;
         }
-        if (Tag.LOGS.isTagged(floor) || Tag.PLANKS.isTagged(floor)) {
+        if (Tag.LOGS.isTagged(floor) || Tag.PLANKS.isTagged(floor) || floor.name().contains("WOOD")) {
             return WOOD;
         }
         if (Tag.BASE_STONE_OVERWORLD.isTagged(floor)
             || Tag.BASE_STONE_NETHER.isTagged(floor)
             || MaterialTags.COBBLESTONES.isTagged(floor)
             || floor == Material.GRAVEL
-            || floor == Material.NETHERRACK
-            || Tag.STAIRS.isTagged(floor)) {
+            || floor == Material.END_STONE
+            || floor.name().contains("STONE")) {
             return ROCKS;
         }
-        return ROCKS; // good default?
+        return SMOOTH; // good default?
     }
 }
