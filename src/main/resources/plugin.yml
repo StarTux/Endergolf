@@ -15,6 +15,7 @@ depend:
 - Area
 - Fam
 - MagicMap
+- AFK
 
 softdepend: []
 

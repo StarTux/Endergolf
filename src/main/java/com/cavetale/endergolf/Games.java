@@ -1,5 +1,6 @@
 package com.cavetale.endergolf;
 
+import com.cavetale.afk.AFKPlugin;
 import com.cavetale.core.event.minigame.MinigameMatchType;
 import com.winthier.creative.vote.MapVote;
 import java.util.HashMap;
@@ -63,12 +64,16 @@ public final class Games {
             }
         }
         final World lobbyWorld = Bukkit.getWorlds().get(0);
+        int notAfk = 0;
+        for (Player player : lobbyWorld.getPlayers()) {
+            if (!AFKPlugin.isAfk(player)) notAfk += 1;
+        }
         if (MapVote.isActive(MinigameMatchType.ENDERGOLF)) {
-            if (activeGameCount > 0 || plugin.getSaveTag().isPause() || lobbyWorld.getPlayers().size() <= 1) {
+            if (activeGameCount > 0 || plugin.getSaveTag().isPause() || notAfk <= 1) {
                 MapVote.stop(MinigameMatchType.ENDERGOLF);
             }
         } else {
-            if (activeGameCount == 0 && !plugin.getSaveTag().isPause() && lobbyWorld.getPlayers().size() > 1) {
+            if (activeGameCount == 0 && !plugin.getSaveTag().isPause() && notAfk > 1) {
                 MapVote.start(MinigameMatchType.ENDERGOLF, mapVote -> {
                         mapVote.setTitle(plugin.getTitle());
                         mapVote.setCallback(mapVoteResult -> {
