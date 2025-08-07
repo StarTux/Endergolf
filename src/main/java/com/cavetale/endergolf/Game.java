@@ -12,6 +12,7 @@ import com.cavetale.core.struct.Vec2i;
 import com.cavetale.core.struct.Vec3i;
 import com.cavetale.magicmap.event.MagicMapCursorEvent;
 import com.cavetale.mytems.Mytems;
+import com.cavetale.mytems.util.Collision;
 import com.cavetale.mytems.util.Entities;
 import com.winthier.creative.BuildWorld;
 import com.winthier.creative.file.Files;
@@ -493,7 +494,7 @@ public final class Game {
         final Vector relativeVelocity = gp.getWindVector().clone().subtract(ballVelocity);
         final double relativeSpeed = relativeVelocity.length();
         // 0.00022 is the naturalistic constant
-        final Vector drag = relativeVelocity.normalize().multiply(relativeSpeed * relativeSpeed * 0.05);
+        final Vector drag = relativeVelocity.normalize().multiply(relativeSpeed * relativeSpeed * 0.00044);
         ballVelocity.add(drag);
         drag.multiply(20.0);
         // Rain
@@ -515,6 +516,7 @@ public final class Game {
                 gp.setState(GamePlayer.State.WAIT);
                 gp.getStroke().disable();
                 gp.setStroke(null);
+                gp.clearPreviewEntities();
             }
             // Remove from game
             if (Duration.between(gp.getOfflineSince(), now).toSeconds() > 60L) {
@@ -536,11 +538,31 @@ public final class Game {
             // their waitingSince timestamp.
             break;
         case STROKE:
-            tickStroke(gp, player, gp.getStroke());
+            if (now.isAfter(gp.getStroke().getEndTime())) {
+                // Timeout
+                gp.getStroke().disable();
+                gp.setStroke(null);
+                gp.setPlaying(false);
+                gp.setObsolete(true);
+                gp.setState(GamePlayer.State.OBSOLETE);
+                gp.clearPreviewEntities();
+                player.showTitle(title(text("Timeout", DARK_RED),
+                                       text("Disqualified", DARK_RED),
+                                       times(Duration.ofSeconds(1),
+                                             Duration.ofSeconds(3),
+                                             Duration.ofSeconds(1))));
+                final Component message = text(player.getName() + " timed out and was disqualified", DARK_RED);
+                for (Player p : getPresentPlayers()) {
+                    p.sendMessage(message);
+                }
+            } else if (!drawStrokePreview(gp, player, gp.getStroke())) {
+                gp.clearPreviewEntities();
+            }
             break;
         case FLIGHT:
             if (gp.getFlightBall().isDead()) {
                 // The ball disappeared
+                gp.clearPreviewEntities();
                 final Location lastLocation = gp.getFlightBall().getLocation();
                 final Vec3i vector = Vec3i.of(lastLocation);
                 if (vector.y <= world.getMinHeight()) {
@@ -579,21 +601,23 @@ public final class Game {
                     gp.setBallVelocity(gp.getFlightBall().getVelocity());
                 }
             } else {
-                final Vector oldVelocity = gp.getBallVelocity();
-                final Vector newVelocity = gp.getFlightBall().getVelocity();
-                applyWeather(newVelocity, gp);
-                gp.getFlightBall().setVelocity(newVelocity);
-                gp.setBallVelocity(newVelocity);
-                if (doDebugGravity && gp.getFlightBall().getTicksLived() > 0) {
-                    final double estimateY = estimateGravity(oldVelocity.getY());
-                    final double diffY = Math.abs(estimateY - newVelocity.getY());
-                    if (diffY > 0.01) {
-                        warn(gp.getFlightBall().getTicksLived() + " Estimate wrong: "
-                             + oldVelocity.getY() + " => " + newVelocity.getY()
-                             + " diff " + (oldVelocity.getY() - newVelocity.getY())
-                             + " instead of " + estimateY + " off by " + diffY);
+                if (gp.getFlightBall().getTicksLived() > 0) {
+                    final Vector oldVelocity = gp.getBallVelocity();
+                    final Vector newVelocity = gp.getFlightBall().getVelocity();
+                    applyWeather(newVelocity, gp);
+                    gp.getFlightBall().setVelocity(newVelocity);
+                    if (doDebugGravity) {
+                        final double estimateY = estimateGravity(oldVelocity.getY());
+                        final double diffY = Math.abs(estimateY - newVelocity.getY());
+                        if (diffY > 0.01) {
+                            warn(gp.getFlightBall().getTicksLived() + " Estimate wrong: "
+                                 + oldVelocity.getY() + " => " + newVelocity.getY()
+                                 + " diff " + (oldVelocity.getY() - newVelocity.getY())
+                                 + " instead of " + estimateY + " off by " + diffY);
+                        }
                     }
                 }
+                gp.setBallVelocity(gp.getFlightBall().getVelocity());
             }
             break;
         case FINISH: case DNF: {
@@ -613,64 +637,60 @@ public final class Game {
     }
 
     /**
-     * Here we give the player a preview of where their ball might fly
-     * if they hit it.
-     * We also watch over a timeout.
+     * Give the player a preview of where their ball might fly if they
+     * hit it.  We do not show a preview if the player does not target
+     * the ball or does not hold a club.
+     *
+     * @param gp the GamePlayer
+     * @param the player
+     * @param the stroke
+     * @return true of the preview was drawn, false otherwise.
      */
-    private void tickStroke(GamePlayer gp, Player player, Stroke stroke) {
+    private boolean drawStrokePreview(GamePlayer gp, Player player, Stroke stroke) {
         final Duration totalStrokeTime = Duration.between(stroke.getStartTime(), stroke.getEndTime());
         final Duration remainingStrokeTime = Duration.between(now, stroke.getEndTime());
         gp.setStrokeProgress((float) remainingStrokeTime.toMillis() / (float) totalStrokeTime.toMillis());
-        if (now.isAfter(stroke.getEndTime())) {
-            // Timeout
-            stroke.disable();
-            gp.setStroke(null);
-            gp.setPlaying(false);
-            gp.setObsolete(true);
-            gp.setState(GamePlayer.State.OBSOLETE);
-            player.showTitle(title(text("Timeout", DARK_RED),
-                                   text("Disqualified", DARK_RED),
-                                   times(Duration.ofSeconds(1),
-                                         Duration.ofSeconds(3),
-                                         Duration.ofSeconds(1))));
-            final Component message = text(player.getName() + " timed out and was disqualified", DARK_RED);
-            for (Player p : getPresentPlayers()) {
-                p.sendMessage(message);
-            }
-            return;
-        }
         final RayTraceResult rayTrace = player.rayTraceBlocks(4.0);
         if (rayTrace == null || rayTrace.getHitBlock() == null || !stroke.getBallVector().equals(Vec3i.of(rayTrace.getHitBlock()))) {
-            return;
+            return false;
         }
         final GolfClub club = GolfClub.ofMaterial(player.getInventory().getItemInMainHand().getType());
-        if (club == null) return;
+        if (club == null) return false;
         final Vector velocity = getBallVelocity(rayTrace.getHitPosition(), stroke.getBallVector(), club, gp.getGroundType());
         final Location playerEyeLocation = player.getEyeLocation();
         Location location = stroke.getBallVector().toCenterFloorLocation(world);
+        gp.prepareNewPreview();
         for (int i = 0; i < 100 && location.isChunkLoaded(); i += 1) {
-            player.spawnParticle(Particle.CURRENT_DOWN, location, 1, 0.0, 0.0, 0.0, 0.0);
-            if (velocity.length() >= 2.0) {
-                final Location location2 = location.clone().add(velocity.clone().multiply(0.2));
-                player.spawnParticle(Particle.CURRENT_DOWN, location2, 1, 0.0, 0.0, 0.0, 0.0);
-            }
-            location = location.add(velocity);
-            if (location.distance(playerEyeLocation) > 96.0) break;
-            velocity.setY(estimateGravity(velocity.getY()));
-            applyWeather(velocity, gp);
-            final Block block = location.getBlock();
-            if (!block.isEmpty() && block.getType() != Material.DRAGON_EGG) {
-                final Vector locationVector = location.toVector();
-                boolean doesCollide = false;
-                for (BoundingBox bb : block.getCollisionShape().getBoundingBoxes()) {
-                    if (bb.contains(locationVector)) {
-                        doesCollide = true;
-                        break;
-                    }
+            if (location.getBlockY() < world.getMinHeight() || !location.isChunkLoaded() || location.distance(playerEyeLocation) > 96.0) break;
+            // Check for collision
+            boolean doesCollide = false;
+            final BoundingBox bb = new  BoundingBox(location.getX() - 0.5, location.getY(), location.getZ() - 0.5,
+                                                    location.getX() + 0.5, location.getY() + 1.0, location.getZ() + 0.5);
+            for (Block block : Collision.getCollidingBlocks(world, bb)) {
+                if (!Vec3i.of(block).equals(stroke.getBallVector())) {
+                    doesCollide = true;
+                    break;
                 }
-                if (doesCollide) break;
             }
+            // Draw preview
+            final Location previewLocation = location.clone().add(0.0, 0.5, 0.0);
+            gp.pushPreviewEntity(previewLocation, player, doesCollide);
+            if (velocity.length() >= 1.0) {
+                gp.pushPreviewEntity(previewLocation.add(velocity.clone().multiply(0.5)), player, false);
+            }
+            // Exit or update
+            if (doesCollide) {
+                player.sendActionBar("COLLIDE " + Vec3i.of(location));
+            }
+            if (doesCollide) break;
+            location = location.add(velocity);
+            velocity.setX(velocity.getX() * 0.98);
+            velocity.setY(estimateGravity(velocity.getY()));
+            velocity.setZ(velocity.getZ() * 0.98);
+            applyWeather(velocity, gp);
         }
+        gp.trimPreviewEntities();
+        return true;
     }
 
     public String getWorldName() {
@@ -780,6 +800,7 @@ public final class Game {
      * As a side effect, the GamePlayer state may be updated.
      */
     public boolean onBallLand(GamePlayer gp, FallingBlock falling, Block block) {
+        gp.clearPreviewEntities();
         final Vec3i blockVector = Vec3i.of(block);
         if (holeArea.contains(blockVector)) {
             // Hole In (or Out), Finish

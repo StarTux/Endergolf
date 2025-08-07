@@ -84,6 +84,7 @@ public final class Games {
                                 game.setWorldAndEnable(mapVoteResult.getLocalWorldCopy());
                             });
                         mapVote.setLobbyWorld(lobbyWorld);
+                        mapVote.setAvoidRepetition(0);
                     });
             }
         }
