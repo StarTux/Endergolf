@@ -123,7 +123,6 @@ public final class GamePlayer {
                         e.setTransformation(TRANS);
                         e.setBillboard(ItemDisplay.Billboard.CENTER);
                         e.setVisibleByDefault(false);
-                        player.sendActionBar("SPAWN " + e.getViewRange());
                         e.setViewRange(512f);
                         e.setBrightness(new ItemDisplay.Brightness(15, 15));
                         e.setGlowing(glowing);

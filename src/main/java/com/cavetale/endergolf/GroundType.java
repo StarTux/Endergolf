@@ -21,15 +21,15 @@ public enum GroundType {
     WOOD(1.0, 0.5, 0.25f, 0.5f, color(0xa47449)),
     SMOOTH(1.0, 0.5, 0.125f, 0.5f, NamedTextColor.BLUE),
     // Medium
-    ROUGH(0.8, 0, 0.5f, 1.5f, NamedTextColor.DARK_GREEN), // tall grass
-    HARDPAN(0.8, 0.25, 0.25f, 0.5f, color(0xf4a460)), // dirt
-    ROCKS(1.0, 0.25, 0.5f, 1f, NamedTextColor.DARK_GRAY), // stone
+    ROUGH(0.9, 0, 0.0f, 1.5f, NamedTextColor.DARK_GREEN), // tall grass
+    HARDPAN(0.9, 0.35, 0.25f, 0.5f, color(0xf4a460)), // dirt
+    ROCKS(1.0, 0.5, 0.5f, 1f, NamedTextColor.DARK_GRAY), // stone
     // Hard
     SAND(0.65, 0, 0.25f, 1f, NamedTextColor.YELLOW),
     MUD(0.5, 0, 0.5f, 1.5f, color(0xa52a2a)),
     BOUNCY(1.0, 1.25, 1.0f, 2f, color(0x00ff00)),
     // Reset
-    WATER(0, 0, 0f, 0f, NamedTextColor.DARK_BLUE),
+    WATER(0, 0, 0f, 0f, color(0x2222ff)),
     LAVA(0, 0, 0f, 0f, NamedTextColor.DARK_RED),
     ;
 
@@ -91,6 +91,7 @@ public enum GroundType {
         }
         if (floor == Material.STONE
             || floor == Material.SMOOTH_STONE
+            || floor == Material.PACKED_MUD
             || MaterialTags.SANDSTONES.isTagged(floor)
             || Tag.TERRACOTTA.isTagged(floor)
             || MaterialTags.CONCRETES.isTagged(floor)
@@ -103,6 +104,9 @@ public enum GroundType {
         }
         if (Tag.LOGS.isTagged(floor) || Tag.PLANKS.isTagged(floor) || floor.name().contains("WOOD")) {
             return WOOD;
+        }
+        if (Tag.LEAVES.isTagged(floor)) {
+            return ROUGH;
         }
         if (Tag.BASE_STONE_OVERWORLD.isTagged(floor)
             || Tag.BASE_STONE_NETHER.isTagged(floor)

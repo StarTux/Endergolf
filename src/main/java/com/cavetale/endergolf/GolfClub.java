@@ -25,11 +25,11 @@ public enum GolfClub {
            "The weakest club in terms of power, used for rolling the ball on the green. It is essential for accuracy and control on the putting surface."),
     DINKER(0.4, 0.1, Material.IRON_HOE,
            "A very short-range club for delicate shots around the green. It imparts minimal power, allowing for precise, soft landings."),
-    BUMPER(0.8, 0.4, Material.IRON_AXE,
+    BUMPER(1.0, 0.6, Material.IRON_AXE,
            "A shorter-range club designed for approach shots to the green. It provides more control and accuracy, making it easier to land the ball near the target."),
-    THUMPER(1.5, 0.8, Material.IRON_PICKAXE,
+    THUMPER(1.75, 0.75, Material.IRON_PICKAXE,
             "A mid-range club that offers a balance between distance and control. Suitable for a variety of shots where precision is important but some power is still needed."),
-    BOOMER(2.0, 0.5, Material.MACE,
+    BOOMER(2.5, 1.0, Material.MACE,
            "The strongest club in your set, designed for maximum distance. Ideal for tee shots and long fairway shots where power is the primary concern."),
     ;
 

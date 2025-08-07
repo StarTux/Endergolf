@@ -102,6 +102,7 @@ public final class Game {
     private Cuboid holeArea;
     private Location holeLocation;
     private int par;
+    private int maxStrokes;
     private int totalPlaying;
     private int totalNotFinished;
     private UUID logTarget;
@@ -220,6 +221,11 @@ public final class Game {
         ifLogPlayer(p -> p.sendMessage(text("[log] " + msg, RED)));
     }
 
+    private void setPar(int value) {
+        this.par = value;
+        this.maxStrokes = Math.max(par + 10, par * 2);
+    }
+
     public void enable() {
         if (world == null) {
             throw new IllegalStateException("World not loaded");
@@ -258,9 +264,9 @@ public final class Game {
                 scanChunk(chunk);
             });
         // Compute distance and par
-        final int distance = (int) Math.round(teeVector.distance(holeArea.getCenter()));
+        final int distance = teeVector.toVec2i().roundedDistance(holeArea.getCenter().toVec2i());
         if (par == 0) {
-            par = Math.max(3, (distance - 1) / 50 + 1);
+            setPar(Math.max(3, (distance - 1) / 50 + 1));
         }
         // Players
         for (GamePlayer gp : List.copyOf(players.values())) {
@@ -293,7 +299,7 @@ public final class Game {
                 final String secondLine = plainText().serialize(sign.getSide(Side.FRONT).line(1));
                 if (!firstLine.equalsIgnoreCase("[par]")) continue;
                 try {
-                    par = Integer.parseInt(secondLine);
+                    setPar(Integer.parseInt(secondLine));
                 } catch (IllegalArgumentException iae) {
                     warn("Bad par sign: " + secondLine + " at " + Vec3i.of(sign.getBlock()));
                 }
@@ -423,9 +429,8 @@ public final class Game {
             }
             // Give all waiting players a chance to stroke
             waitingPlayers.sort(Comparator.comparing(GamePlayer::getWaitingSince));
-            final int blowUpCount = Math.max(par + 10, par * 2);
             for (GamePlayer gp : waitingPlayers) {
-                if (gp.getStrokeCount() > blowUpCount) {
+                if (gp.getStrokeCount() > maxStrokes) {
                     gp.setState(GamePlayer.State.DNF);
                     gp.setFinishedSince(now);
                     final Player player = gp.getPlayer();
@@ -491,15 +496,10 @@ public final class Game {
     }
 
     public void applyWeather(Vector ballVelocity, GamePlayer gp) {
-        final Vector relativeVelocity = gp.getWindVector().clone().subtract(ballVelocity);
-        final double relativeSpeed = relativeVelocity.length();
-        // 0.00022 is the naturalistic constant
-        final Vector drag = relativeVelocity.normalize().multiply(relativeSpeed * relativeSpeed * 0.00044);
-        ballVelocity.add(drag);
-        drag.multiply(20.0);
-        // Rain
+        final Vector windVector = gp.getWindVector().clone().subtract(ballVelocity);
+        ballVelocity.add(gp.getWindVector().clone().multiply(0.0625));
         if (world.hasStorm() && (gp.getFlightBall() == null || gp.getFlightBall().isInRain())) {
-            ballVelocity.setY(ballVelocity.getY() - 0.15);
+            ballVelocity.add(new Vector(0.0, -0.15, 0.0));
         }
     }
 
@@ -575,7 +575,7 @@ public final class Game {
                     player.sendMessage(text("Your ball fell out of the world", RED));
                     gp.setState(GamePlayer.State.WAIT);
                     gp.setWaitingSince(now);
-                    gp.setStrokeCooldown(now.plus(Duration.ofSeconds(5)));
+                    gp.setStrokeCooldown(now.plus(Duration.ofSeconds(3)));
                     gp.setFlightBall(null);
                     gp.setBallVelocity(null);
                 } else if (!vector.toBlock(world).isEmpty() && !Tag.REPLACEABLE.isTagged(vector.toBlock(world).getType())) {
@@ -661,7 +661,7 @@ public final class Game {
         Location location = stroke.getBallVector().toCenterFloorLocation(world);
         gp.prepareNewPreview();
         for (int i = 0; i < 100 && location.isChunkLoaded(); i += 1) {
-            if (location.getBlockY() < world.getMinHeight() || !location.isChunkLoaded() || location.distance(playerEyeLocation) > 96.0) break;
+            if (location.getBlockY() < world.getMinHeight() || !location.isChunkLoaded()) break;
             // Check for collision
             boolean doesCollide = false;
             final BoundingBox bb = new  BoundingBox(location.getX() - 0.5, location.getY(), location.getZ() - 0.5,
@@ -679,9 +679,6 @@ public final class Game {
                 gp.pushPreviewEntity(previewLocation.add(velocity.clone().multiply(0.5)), player, false);
             }
             // Exit or update
-            if (doesCollide) {
-                player.sendActionBar("COLLIDE " + Vec3i.of(location));
-            }
             if (doesCollide) break;
             location = location.add(velocity);
             velocity.setX(velocity.getX() * 0.98);
@@ -851,23 +848,48 @@ public final class Game {
             return false;
         }
         final GroundType ground = GroundType.at(block);
-        final double bounceY = gp.getBallVelocity().getY() * -1 * ground.getBounciness();
+        final Vector bounceVelocity = gp.getBallVelocity().clone();
+        bounceVelocity.setY(bounceVelocity.getY() * -1 * ground.getBounciness());
         if (ground.isReset()) {
             // Return to sender
             log("" + gp.getName() + " reset at " + blockVector);
             gp.setFlightBall(null);
             gp.setState(GamePlayer.State.WAIT);
             gp.setWaitingSince(now);
-            gp.setStrokeCooldown(now.plus(Duration.ofSeconds(5)));
+            gp.setStrokeCooldown(now.plus(Duration.ofSeconds(3)));
+            boolean rescued = false;
+            if (gp.getBounceVector() != null) {
+                rescued = true;
+                gp.setBallVector(gp.getBounceVector());
+                gp.setBounceVector(null);
+                gp.setGroundType(GroundType.at(gp.getBallVector().toBlock(world)));
+                gp.setDistance(gp.getBallVector().toVec2i().roundedDistance(holeArea.getCenter().toVec2i()));
+            }
             final Player player = gp.getPlayer();
             if (player != null) {
-                player.showTitle(title(ground.getDisplayComponent(),
-                                       text("Try Again", RED),
-                                       times(Duration.ZERO,
-                                             Duration.ofSeconds(2),
-                                             Duration.ofSeconds(2))));
-                player.sendMessage(textOfChildren(text("Your ball landed in the ", RED),
-                                                  ground.getDisplayComponent()));
+                updateBallCompass(player, gp);
+                if (rescued) {
+                    gp.setStrokeCount(gp.getStrokeCount() + 1);
+                    player.showTitle(title(ground.getDisplayComponent(),
+                                           text("Bounce Rescue", ground.getColor()),
+                                           times(Duration.ZERO,
+                                                 Duration.ofSeconds(2),
+                                                 Duration.ofSeconds(2))));
+                    player.sendMessage(textOfChildren(text("Your ball landed in the ", WHITE),
+                                                      ground.getDisplayComponent(),
+                                                      text(" and was placed in the ", WHITE),
+                                                      gp.getGroundType().getDisplayComponent(),
+                                                      text(" where it last bounced off the ground.", WHITE),
+                                                      text(" (+1 Stroke Penalty)", DARK_RED)));
+                } else {
+                    player.showTitle(title(ground.getDisplayComponent(),
+                                           text("Try Again", ground.getColor()),
+                                           times(Duration.ZERO,
+                                                 Duration.ofSeconds(2),
+                                                 Duration.ofSeconds(2))));
+                    player.sendMessage(textOfChildren(text("Your ball landed in the ", ground.getColor()),
+                                                      ground.getDisplayComponent()));
+                }
                 switch (ground) {
                 case WATER:
                     player.playSound(player, Sound.AMBIENT_UNDERWATER_ENTER, SoundCategory.MASTER, 1f, 1f);
@@ -882,13 +904,13 @@ public final class Game {
                 }
             }
             return false;
-        } else if (bounceY < 0.1 || blockVector.equals(gp.getBounceVector())) {
+        } else if (blockVector.equals(gp.getBounceVector()) || bounceVelocity.getY() < 0.01 || bounceVelocity.length() < 0.05) {
             // Land for real
             log("" + gp.getName() + " land at " + blockVector);
-            final int distance = (int) Math.round(blockVector.distance(gp.getBallVector()));
+            final int distance = blockVector.toVec2i().roundedDistance(gp.getBallVector().toVec2i());
             gp.setBallVector(blockVector);
             gp.setBounceVector(null);
-            gp.setDistance((int) Math.round(gp.getBallVector().distance(holeArea.getCenter())));
+            gp.setDistance(gp.getBallVector().toVec2i().roundedDistance(holeArea.getCenter().toVec2i()));
             gp.setFlightBall(null);
             gp.setState(GamePlayer.State.WAIT);
             gp.setWaitingSince(now);
@@ -914,13 +936,11 @@ public final class Game {
             return true;
         } else {
             // Bounce
-            log("" + gp.getName() + " bounce at " + blockVector + " by=" + bounceY);
-            Vector newVelocity = gp.getBallVelocity().clone();
-            newVelocity.setY(bounceY);
+            log("" + gp.getName() + " bounce at " + blockVector + " by=" + bounceVelocity.getY());
             gp.setBounceVector(blockVector);
-            final FallingBlock newBall = spawnBall(falling.getLocation(), newVelocity);
+            final FallingBlock newBall = spawnBall(falling.getLocation(), bounceVelocity);
             gp.setFlightBall(newBall);
-            gp.setBallVelocity(newVelocity);
+            gp.setBallVelocity(bounceVelocity);
             final Player player = gp.getPlayer();
             if (player != null) {
                 player.playSound(player, Sound.BLOCK_STONE_HIT, SoundCategory.MASTER, 1f, 1f);
@@ -980,6 +1000,8 @@ public final class Game {
                                        text(tiny(" (par "), GRAY),
                                        text(par, WHITE),
                                        text(")", GRAY)));
+            sidebar.add(textOfChildren(text(tiny("max "), GRAY),
+                                       text(maxStrokes, WHITE)));
             if (!gp.isFinished()) {
                 final Location playerEyeLocation = event.getPlayer().getEyeLocation();
                 final Location directionLocation = new Location(world, 0, 0, 0);
