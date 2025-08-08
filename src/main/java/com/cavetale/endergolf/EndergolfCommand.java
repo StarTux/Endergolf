@@ -37,6 +37,9 @@ public final class EndergolfCommand extends AbstractCommand<EndergolfPlugin> {
         if (Game.in(player.getWorld()) != null) {
             throw new CommandWarn("You're already in a game");
         }
+        if (plugin.getSaveTag().isEvent()) {
+            throw new CommandWarn("Cannot play alone during an event");
+        }
         mapVote.openVoteBook(player);
     }
 
@@ -44,6 +47,9 @@ public final class EndergolfCommand extends AbstractCommand<EndergolfPlugin> {
         if (args.length != 1) return true;
         if (Game.in(player.getWorld()) != null) {
             throw new CommandWarn("You're already in a game");
+        }
+        if (plugin.getSaveTag().isEvent()) {
+            throw new CommandWarn("Cannot play alone during an event");
         }
         final BuildWorld buildWorld = BuildWorld.findWithPath(args[0]);
         if (buildWorld == null || buildWorld.getRow().parseMinigame() != MinigameMatchType.ENDERGOLF || !buildWorld.getRow().isPurposeConfirmed()) {
