@@ -21,25 +21,29 @@ import static net.kyori.adventure.text.format.TextDecoration.*;
 @Getter
 @RequiredArgsConstructor
 public enum GolfClub {
-    PUTTER(0.25, 0, Material.IRON_SHOVEL,
+    PUTTER(0.25, 0, Material.IRON_SHOVEL, Mytems.WOODEN_GOLF_CLUB,
            "The weakest club in terms of power, used for rolling the ball on the green. It is essential for accuracy and control on the putting surface."),
-    DINKER(0.4, 0.1, Material.IRON_HOE,
+    DINKER(0.4, 0.1, Material.IRON_HOE, Mytems.IRON_GOLF_CLUB,
            "A very short-range club for delicate shots around the green. It imparts minimal power, allowing for precise, soft landings."),
-    BUMPER(1.0, 0.6, Material.IRON_AXE,
+    BUMPER(1.0, 0.6, Material.IRON_AXE, Mytems.GOLDEN_GOLF_CLUB,
            "A shorter-range club designed for approach shots to the green. It provides more control and accuracy, making it easier to land the ball near the target."),
-    THUMPER(1.75, 0.75, Material.IRON_PICKAXE,
+    THUMPER(1.75, 0.75, Material.IRON_PICKAXE, Mytems.DIAMOND_GOLF_CLUB,
             "A mid-range club that offers a balance between distance and control. Suitable for a variety of shots where precision is important but some power is still needed."),
-    BOOMER(2.5, 1.0, Material.MACE,
+    BOOMER(2.5, 1.0, Material.MACE, null,
            "The strongest club in your set, designed for maximum distance. Ideal for tee shots and long fairway shots where power is the primary concern."),
     ;
 
     private final double strength;
     private final double strengthFactor;
     private final Material material;
+    private final Mytems mytems;
     private final String description;
 
     public ItemStack createItemStack() {
         final ItemStack result = new ItemStack(material);
+        if (mytems != null) {
+            result.setData(DataComponentTypes.ITEM_MODEL, mytems.getNamespacedKey());
+        }
         result.unsetData(DataComponentTypes.ATTRIBUTE_MODIFIERS);
         result.setData(DataComponentTypes.ITEM_NAME, text(name().substring(0, 1) + name().substring(1).toLowerCase(), GOLD));
         final List<Component> lore = new ArrayList<>();
