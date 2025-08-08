@@ -107,6 +107,7 @@ public final class Game {
     private int totalNotFinished;
     private UUID logTarget;
     private final Random random = new Random();
+    private boolean singleplayer;
     // Updated in tick()
     private Instant now;
     // Countdown
@@ -223,7 +224,9 @@ public final class Game {
 
     private void setPar(int value) {
         this.par = value;
-        this.maxStrokes = Math.max(par + 10, par * 2);
+        this.maxStrokes = singleplayer
+            ? Math.max(par + 20, par * 3)
+            : Math.max(par + 10, par * 2);
     }
 
     public void enable() {
@@ -456,7 +459,12 @@ public final class Game {
                     }
                 }
                 if (tooClose) continue;
-                final Stroke stroke = new Stroke(this, gp, gp.getBallVector(), now, now.plus(Duration.ofSeconds(45)));
+                final int seconds = singleplayer
+                    ? 180
+                    : gp.getBallVector().toVec2i().roundedDistance(teeVector.toVec2i()) > 8
+                    ? 60
+                    : 30;
+                final Stroke stroke = new Stroke(this, gp, gp.getBallVector(), now, now.plus(Duration.ofSeconds(seconds)));
                 strokes.add(stroke);
                 stroke.enable();
                 gp.setStroke(stroke);
@@ -1105,35 +1113,37 @@ public final class Game {
         }
         winners.sort(Comparator.comparing(GamePlayer::getName));
         // Announce
-        final List<Component> winnerNames = new ArrayList<>(winners.size());
-        for (GamePlayer gp : winners) winnerNames.add(text(gp.getName(), WHITE));
-        final Component announcement;
-        final Title title;
-        if (winnerNames.size() == 1) {
-            announcement = textOfChildren(winnerNames.get(0), text(" wins the game!", GREEN));
-            title = title(winnerNames.get(0),
-                          text("Wins the Game!", GREEN),
-                          times(Duration.ofSeconds(1),
-                                Duration.ofSeconds(4),
-                                Duration.ofSeconds(1)));
-        } else {
-            announcement = join(JoinConfiguration.builder()
-                                .separator(text(", ", GREEN))
-                                .lastSeparator(text(" and ", GREEN))
-                                .suffix(text(" win the game!", GREEN)),
-                                winnerNames);
-            title = title(text("Winners", GREEN),
-                          join(separator(space()), winnerNames),
-                          times(Duration.ofSeconds(1),
-                                Duration.ofSeconds(3),
-                                Duration.ofSeconds(1)));
-        }
-        for (Player player : getPresentPlayers()) {
-            player.sendMessage(empty());
-            player.sendMessage(announcement);
-            player.sendMessage(empty());
-            player.showTitle(title);
-            player.playSound(player, Sound.ENTITY_ENDER_DRAGON_DEATH, 0.5f, 2f);
+        if (!singleplayer) {
+            final List<Component> winnerNames = new ArrayList<>(winners.size());
+            for (GamePlayer gp : winners) winnerNames.add(text(gp.getName(), WHITE));
+            final Component announcement;
+            final Title title;
+            if (winnerNames.size() == 1) {
+                announcement = textOfChildren(winnerNames.get(0), text(" wins the game!", GREEN));
+                title = title(winnerNames.get(0),
+                              text("Wins the Game!", GREEN),
+                              times(Duration.ofSeconds(1),
+                                    Duration.ofSeconds(4),
+                                    Duration.ofSeconds(1)));
+            } else {
+                announcement = join(JoinConfiguration.builder()
+                                    .separator(text(", ", GREEN))
+                                    .lastSeparator(text(" and ", GREEN))
+                                    .suffix(text(" win the game!", GREEN)),
+                                    winnerNames);
+                title = title(text("Winners", GREEN),
+                              join(separator(space()), winnerNames),
+                              times(Duration.ofSeconds(1),
+                                    Duration.ofSeconds(3),
+                                    Duration.ofSeconds(1)));
+            }
+            for (Player player : getPresentPlayers()) {
+                player.sendMessage(empty());
+                player.sendMessage(announcement);
+                player.sendMessage(empty());
+                player.showTitle(title);
+                player.playSound(player, Sound.ENTITY_ENDER_DRAGON_DEATH, 0.5f, 2f);
+            }
         }
         // Call event
         final MinigameMatchCompleteEvent event = new MinigameMatchCompleteEvent(MinigameMatchType.ENDERGOLF);
