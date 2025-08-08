@@ -9,6 +9,7 @@ import net.kyori.adventure.text.format.TextColor;
 import org.bukkit.Material;
 import org.bukkit.Tag;
 import org.bukkit.block.Block;
+import org.bukkit.block.data.Waterlogged;
 import static net.kyori.adventure.text.Component.text;
 import static net.kyori.adventure.text.format.TextColor.color;
 
@@ -58,6 +59,9 @@ public enum GroundType {
      * block below.
      */
     public static GroundType at(Block block) {
+        if (block.getBlockData() instanceof Waterlogged waterlogged && waterlogged.isWaterlogged()) {
+            return WATER;
+        }
         final Material ball = block.getType();
         if (!ball.isAir()) {
             if (ball == Material.WATER) {
