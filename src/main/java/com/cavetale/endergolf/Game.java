@@ -46,7 +46,6 @@ import org.bukkit.Material;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.SoundCategory;
-import org.bukkit.Tag;
 import org.bukkit.World;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.block.Block;
@@ -591,7 +590,7 @@ public final class Game {
                     gp.setStrokeCooldown(now.plus(Duration.ofSeconds(3)));
                     gp.setFlightBall(null);
                     gp.setBallVelocity(null);
-                } else if (!vector.toBlock(world).isEmpty() && !Tag.REPLACEABLE.isTagged(vector.toBlock(world).getType())) {
+                } else if (!vector.toBlock(world).isEmpty()) {
                     // Non-replaceable block, such as carpet.
                     Block block = vector.toBlock(world);
                     switch (block.getType()) {
