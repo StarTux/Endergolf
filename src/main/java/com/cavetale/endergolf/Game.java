@@ -12,6 +12,7 @@ import com.cavetale.core.struct.Vec2i;
 import com.cavetale.core.struct.Vec3i;
 import com.cavetale.magicmap.event.MagicMapCursorEvent;
 import com.cavetale.mytems.Mytems;
+import com.cavetale.mytems.item.font.Glyph;
 import com.cavetale.mytems.util.Collision;
 import com.cavetale.mytems.util.Entities;
 import com.winthier.creative.BuildWorld;
@@ -63,6 +64,7 @@ import org.bukkit.potion.PotionEffect;
 import org.bukkit.util.BoundingBox;
 import org.bukkit.util.RayTraceResult;
 import org.bukkit.util.Vector;
+import static com.cavetale.core.font.Unicode.subscript;
 import static com.cavetale.core.font.Unicode.tiny;
 import static io.papermc.paper.datacomponent.item.ItemLore.lore;
 import static io.papermc.paper.datacomponent.item.LodestoneTracker.lodestoneTracker;
@@ -110,6 +112,7 @@ public final class Game {
     private boolean singleplayer;
     // Updated in tick()
     private Instant now;
+    private List<Component> scoreLines = new ArrayList<>();
     // Countdown
     private Instant countdownStart;
     private Instant countdownStop;
@@ -174,6 +177,7 @@ public final class Game {
         world.setGameRule(GameRule.FALL_DAMAGE, false);
         world.setGameRule(GameRule.DROWNING_DAMAGE, false);
         world.setGameRule(GameRule.LOCATOR_BAR, true);
+        world.setViewDistance(32);
     }
 
     private void loadAreas() {
@@ -479,6 +483,7 @@ public final class Game {
                         player.getInventory().setItem(club.ordinal(), club.createItemStack());
                     }
                     player.getInventory().addItem(makeBallCompass());
+                    player.getInventory().addItem(Mytems.BINOCULARS.createItemStack());
                     player.getInventory().setItemInOffHand(Mytems.MAGIC_MAP.createItemStack());
                     player.getInventory().setBoots(Mytems.SNEAKERS.createItemStack());
                 }
@@ -626,6 +631,7 @@ public final class Game {
                     }
                 }
                 gp.setBallVelocity(gp.getFlightBall().getVelocity());
+                gp.getFlightBall().getChunk().addPluginChunkTicket(plugin);
             }
             break;
         case FINISH: case DNF: {
@@ -816,6 +822,7 @@ public final class Game {
             gp.setFinishedSince(now);
             falling.remove();
             gp.setFlightBall(null);
+            buildScoreLines();
             final int strokes = gp.getStrokeCount();
             log("" + gp.getName()
                                     + " finished with " + strokes + "/" + par + " strokes: "
@@ -837,7 +844,6 @@ public final class Game {
             }
             final Player player = gp.getPlayer();
             if (player != null) {
-                player.getInventory().clear();
                 player.showTitle(title(term,
                                        textOfChildren(text("Hole: ", GRAY),
                                                       text(strokes, WHITE),
@@ -1042,6 +1048,7 @@ public final class Game {
             sidebar.add(textOfChildren(text(tiny("game over "), GRAY), text(endSeconds, WHITE)));
             event.bossbar(PlayerHudPriority.HIGH, text("Game Over", RED), BossBar.Color.RED, BossBar.Overlay.NOTCHED_20, endProgress);
         }
+        sidebar.addAll(scoreLines);
         event.sidebar(PlayerHudPriority.HIGH, sidebar);
     }
 
@@ -1086,6 +1093,7 @@ public final class Game {
                                              empty(),
                                              textOfChildren(Mytems.MOUSE_RIGHT, text(" Teleport", GRAY)).decoration(ITALIC, false));
         item.setData(DataComponentTypes.LORE, lore(lore));
+        item.setData(DataComponentTypes.ITEM_MODEL, Mytems.MASTER_FINDER.getNamespacedKey());
         return item;
     }
 
@@ -1174,5 +1182,27 @@ public final class Game {
         }
         // End
         return true;
+    }
+
+    public void buildScoreLines() {
+        final List<GamePlayer> gps = new ArrayList<>();
+        for (GamePlayer gp : players.values()) {
+            if (gp.isFinished()) gps.add(gp);
+        }
+        gps.sort(Comparator.comparing(GamePlayer::getStrokeCount));
+        int rank = 0;
+        int lastStrokes = -1;
+        scoreLines = new ArrayList<>();
+        for (GamePlayer gp : gps) {
+            final int strokes = gp.getStrokeCount();
+            if (lastStrokes != strokes) {
+                rank += 1;
+                lastStrokes = strokes;
+            }
+            scoreLines.add(textOfChildren(Glyph.toComponent("" + rank),
+                                          text(subscript(strokes), GRAY),
+                                          space(),
+                                          text(gp.getName(), WHITE)));
+        }
     }
 }
