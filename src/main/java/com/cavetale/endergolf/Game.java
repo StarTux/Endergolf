@@ -7,9 +7,11 @@ import com.cavetale.core.event.hud.PlayerHudPriority;
 import com.cavetale.core.event.minigame.MinigameMatchCompleteEvent;
 import com.cavetale.core.event.minigame.MinigameMatchType;
 import com.cavetale.core.font.Unicode;
+import com.cavetale.core.playercache.PlayerCache;
 import com.cavetale.core.struct.Cuboid;
 import com.cavetale.core.struct.Vec2i;
 import com.cavetale.core.struct.Vec3i;
+import com.cavetale.endergolf.sql.SQLMapPlayerBest;
 import com.cavetale.magicmap.event.MagicMapCursorEvent;
 import com.cavetale.mytems.Mytems;
 import com.cavetale.mytems.item.font.Glyph;
@@ -23,6 +25,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -293,6 +296,27 @@ public final class Game {
         }
         mapReview = MapReview.start(world, buildWorld);
         buildWorld.announceMap(world);
+        plugin.getDatabase().find(SQLMapPlayerBest.class)
+            .eq("mapPath", buildWorld.getPath())
+            .findListAsync(list -> {
+                    if (list.isEmpty()) return;
+                    list.sort(Comparator.comparing(SQLMapPlayerBest::getStrokes));
+                    final Component announcement = textOfChildren(text("Best of all time: ", WHITE),
+                                                                  text(PlayerCache.nameForUuid(list.get(0).getPlayer()), GREEN),
+                                                                  text(" with ", WHITE),
+                                                                  text(list.get(0).getStrokes(), GREEN),
+                                                                  text(" strokes", WHITE));
+                    for (Player player : getPresentPlayers()) {
+                        player.sendMessage(announcement);
+                    }
+                    for (SQLMapPlayerBest row : list) {
+                        final Player player = Bukkit.getPlayer(row.getPlayer());
+                        if (player != null && world.equals(player.getWorld())) {
+                            player.sendMessage(textOfChildren(text("Personal best: ", WHITE),
+                                                              text(row.getStrokes(), GREEN)));
+                        }
+                    }
+                });
         setState(State.COUNTDOWN);
     }
 
@@ -351,8 +375,10 @@ public final class Game {
         switch (newState) {
         case COUNTDOWN:
             countdownStart = Instant.now();
-            countdownStop = countdownStart.plus(Duration.ofSeconds(12));
-            countdownSeconds = 10;
+            countdownSeconds = singleplayer
+                ? 3
+                : 10;
+            countdownStop = countdownStart.plus(Duration.ofSeconds(countdownSeconds));
             break;
         case PLAY:
             for (Player player : getPresentPlayers()) {
@@ -531,7 +557,7 @@ public final class Game {
                 gp.clearPreviewEntities();
             }
             // Remove from game
-            if (Duration.between(gp.getOfflineSince(), now).toSeconds() > 60L) {
+            if (gp.isPlaying() && Duration.between(gp.getOfflineSince(), now).toSeconds() > 60L) {
                 log("Removing " + gp.getName() + " because they have been offline too long");
                 gp.setPlaying(false);
                 gp.setState(GamePlayer.State.SPECTATE);
@@ -824,8 +850,37 @@ public final class Game {
             buildScoreLines();
             final int strokes = gp.getStrokeCount();
             log("" + gp.getName()
-                                    + " finished with " + strokes + "/" + par + " strokes: "
-                                    + gp.getPerformanceString());
+                + " finished with " + strokes + "/" + par + " strokes: "
+                + gp.getPerformanceString());
+            plugin.getDatabase().scheduleAsyncTask(() -> {
+                    final SQLMapPlayerBest best = plugin.getDatabase().find(SQLMapPlayerBest.class)
+                        .eq("mapPath", buildWorld.getPath())
+                        .eq("player", gp.getUuid())
+                        .findUnique();
+                    if (best == null) {
+                        plugin.getDatabase().insert(new SQLMapPlayerBest(buildWorld.getPath(), gp.getUuid(), gp.getStrokeCount(), new Date()));
+                        Bukkit.getScheduler().runTask(plugin, () -> {
+                                final Player player = gp.getPlayer();
+                                if (player == null) return;
+                                player.sendMessage(textOfChildren(text("First personal best on ", WHITE),
+                                                                  text(buildWorld.getName(), GREEN),
+                                                                  text(": ", WHITE),
+                                                                  text(strokes, GREEN)));
+                            });
+                    } else if (best.getStrokes() > strokes) {
+                        best.setStrokes(strokes);
+                        best.setTime(new Date());
+                        plugin.getDatabase().update(best);
+                        Bukkit.getScheduler().runTask(plugin, () -> {
+                                final Player player = gp.getPlayer();
+                                if (player == null) return;
+                                player.sendMessage(textOfChildren(text("New personal best on ", WHITE),
+                                                                  text(buildWorld.getName(), GREEN),
+                                                                  text(": ", WHITE),
+                                                                  text(strokes, GREEN)));
+                            });
+                    }
+                });
             final Component term = GolfScoringTerm.getComponent(strokes, par);
             final Component message = textOfChildren(text(gp.getName(), WHITE),
                                                      text(" completed ", GRAY),

@@ -130,5 +130,13 @@
       <scope>provided</scope>
     </dependency>
 
+    <!-- SQL -->
+    <dependency>
+      <groupId>com.winthier.sql</groupId>
+      <artifactId>sql</artifactId>
+      <version>0.1-SNAPSHOT</version>
+      <scope>provided</scope>
+    </dependency>
+
   </dependencies>
 </project>

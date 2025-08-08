@@ -1,8 +1,10 @@
 package com.cavetale.endergolf;
 
 import com.cavetale.core.util.Json;
+import com.cavetale.endergolf.sql.SQLMapPlayerBest;
 import com.cavetale.fam.trophy.Highscore;
 import com.cavetale.mytems.item.trophy.TrophyCategory;
+import com.winthier.sql.SQLDatabase;
 import java.io.File;
 import java.util.List;
 import lombok.Getter;
@@ -28,6 +30,7 @@ public final class EndergolfPlugin extends JavaPlugin {
     private List<Component> highscoreLines = List.of();
     private final Component title = textOfChildren(text("Ender", GREEN),
                                                    text("golf", WHITE));
+    private final SQLDatabase database = new SQLDatabase(this);
 
     public EndergolfPlugin() {
         instance = this;
@@ -41,12 +44,16 @@ public final class EndergolfPlugin extends JavaPlugin {
         games.enable();
         loadSaveTag();
         computeHighscore();
+        database.registerTables(List.of(SQLMapPlayerBest.class));
+        database.createAllTables();
     }
 
     @Override
     public void onDisable() {
         games.disable();
         saveSaveTag();
+        database.waitForAsyncTask();
+        database.close();
     }
 
     public static EndergolfPlugin endergolfPlugin() {
