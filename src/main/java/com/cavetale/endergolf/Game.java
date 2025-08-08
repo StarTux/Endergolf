@@ -305,7 +305,8 @@ public final class Game {
                     if (list.isEmpty()) return;
                     list.sort(Comparator.comparing(SQLMapPlayerBest::getStrokes));
                     globalBest = list.get(0).getStrokes();
-                    final Component announcement = textOfChildren(text("Best of all time: ", WHITE),
+                    final Component announcement = textOfChildren(Mytems.GOLD_MEDAL,
+                                                                  text(" Best of all time: ", WHITE),
                                                                   text(PlayerCache.nameForUuid(list.get(0).getPlayer()), GREEN),
                                                                   text(" with ", WHITE),
                                                                   text(list.get(0).getStrokes(), GREEN),
@@ -316,7 +317,8 @@ public final class Game {
                     for (SQLMapPlayerBest row : list) {
                         final Player player = Bukkit.getPlayer(row.getPlayer());
                         if (player != null && world.equals(player.getWorld())) {
-                            player.sendMessage(textOfChildren(text("Personal best: ", WHITE),
+                            player.sendMessage(textOfChildren(Mytems.GOLD_MEDAL,
+                                                              text(" Personal best: ", WHITE),
                                                               text(row.getStrokes(), GREEN)));
                         }
                     }
@@ -888,12 +890,16 @@ public final class Game {
                                 if (player == null) return;
                                 if (globalBest > 0 && strokes < globalBest) {
                                     globalBest = strokes;
-                                    player.sendMessage(textOfChildren(text("New best of all time on ", WHITE),
-                                                                      text(buildWorld.getName(), GREEN),
-                                                                      text(": ", WHITE),
-                                                                      text(strokes, GREEN)));
+                                    final Component message = textOfChildren(Mytems.GOLD_MEDAL,
+                                                                             text(" " + gp.getName(), GREEN),
+                                                                             text(" got a new best of all time: ", WHITE),
+                                                                             text(strokes, GREEN));
+                                    for (Player p : getPresentPlayers()) {
+                                        p.sendMessage(message);
+                                    }
                                 } else {
-                                    player.sendMessage(textOfChildren(text("New personal best on ", WHITE),
+                                    player.sendMessage(textOfChildren(Mytems.GOLD_MEDAL,
+                                                                      text(" New personal best on ", WHITE),
                                                                       text(buildWorld.getName(), GREEN),
                                                                       text(": ", WHITE),
                                                                       text(strokes, GREEN)));
