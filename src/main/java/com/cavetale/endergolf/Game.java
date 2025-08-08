@@ -76,6 +76,8 @@ import static net.kyori.adventure.text.Component.space;
 import static net.kyori.adventure.text.Component.text;
 import static net.kyori.adventure.text.Component.textOfChildren;
 import static net.kyori.adventure.text.JoinConfiguration.separator;
+import static net.kyori.adventure.text.event.ClickEvent.runCommand;
+import static net.kyori.adventure.text.event.HoverEvent.showText;
 import static net.kyori.adventure.text.format.NamedTextColor.*;
 import static net.kyori.adventure.text.format.TextDecoration.*;
 import static net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText;
@@ -106,6 +108,7 @@ public final class Game {
     private Cuboid holeArea;
     private Location holeLocation;
     private int par;
+    private int globalBest;
     private int maxStrokes;
     private int totalPlaying;
     private int totalNotFinished;
@@ -213,7 +216,7 @@ public final class Game {
     public boolean ifLogPlayer(Consumer<Player> callback) {
         if (logTarget == null) return false;
         final Player player = Bukkit.getPlayer(logTarget);
-        if (player == null) return false;
+        if (player == null || !world.equals(player.getWorld())) return false;
         callback.accept(player);
         return true;
     }
@@ -301,6 +304,7 @@ public final class Game {
             .findListAsync(list -> {
                     if (list.isEmpty()) return;
                     list.sort(Comparator.comparing(SQLMapPlayerBest::getStrokes));
+                    globalBest = list.get(0).getStrokes();
                     final Component announcement = textOfChildren(text("Best of all time: ", WHITE),
                                                                   text(PlayerCache.nameForUuid(list.get(0).getPlayer()), GREEN),
                                                                   text(" with ", WHITE),
@@ -404,6 +408,14 @@ public final class Game {
             endSeconds = 30L;
             endStop = now.plus(Duration.ofSeconds(endSeconds));
             endProgress = 1f;
+            if (!plugin.getSaveTag().isEvent()) {
+                final Component message = textOfChildren(Mytems.MOUSE_LEFT, text(" Click here to return to the lobby", GREEN, BOLD))
+                    .hoverEvent(showText(text("/golf quit", GRAY)))
+                    .clickEvent(runCommand("/golf quit"));
+                for (Player player : getPresentPlayers()) {
+                    player.sendMessage(message);
+                }
+            }
             break;
         default: break;
         }
@@ -516,7 +528,7 @@ public final class Game {
             }
             break;
         case END:
-            if (now.isAfter(endStop)) {
+            if (world.getPlayers().isEmpty() || now.isAfter(endStop)) {
                 finished = true;
             } else {
                 final Duration totalEndTime = Duration.between(endStart, endStop);
@@ -543,7 +555,7 @@ public final class Game {
 
     private void tickPlay(GamePlayer gp) {
         final Player player = gp.getPlayer();
-        if (player == null) {
+        if (player == null || !world.equals(player.getWorld())) {
             // Player is offline
             // Record offline time
             if (gp.getOfflineSince() == null) {
@@ -874,10 +886,18 @@ public final class Game {
                         Bukkit.getScheduler().runTask(plugin, () -> {
                                 final Player player = gp.getPlayer();
                                 if (player == null) return;
-                                player.sendMessage(textOfChildren(text("New personal best on ", WHITE),
-                                                                  text(buildWorld.getName(), GREEN),
-                                                                  text(": ", WHITE),
-                                                                  text(strokes, GREEN)));
+                                if (globalBest > 0 && strokes < globalBest) {
+                                    globalBest = strokes;
+                                    player.sendMessage(textOfChildren(text("New best of all time on ", WHITE),
+                                                                      text(buildWorld.getName(), GREEN),
+                                                                      text(": ", WHITE),
+                                                                      text(strokes, GREEN)));
+                                } else {
+                                    player.sendMessage(textOfChildren(text("New personal best on ", WHITE),
+                                                                      text(buildWorld.getName(), GREEN),
+                                                                      text(": ", WHITE),
+                                                                      text(strokes, GREEN)));
+                                }
                             });
                     }
                 });
@@ -1258,5 +1278,33 @@ public final class Game {
                                           space(),
                                           text(gp.getName(), WHITE)));
         }
+    }
+
+    public void quit(Player player) {
+        final GamePlayer gp = getGamePlayer(player);
+        if (gp != null && gp.isPlaying() && !gp.isFinished()) {
+            switch (state) {
+            case COUNTDOWN:
+            case PLAY:
+                gp.setPlaying(false);
+                if (gp.getState() == GamePlayer.State.STROKE) {
+                    gp.setState(GamePlayer.State.WAIT);
+                    gp.getStroke().disable();
+                    gp.setStroke(null);
+                    gp.clearPreviewEntities();
+                }
+                if (gp.getState() == GamePlayer.State.FLIGHT) {
+                    if (gp.getFlightBall() != null) {
+                        gp.getFlightBall().remove();
+                        gp.setFlightBall(null);
+                    }
+                }
+                gp.clearPreviewEntities();
+                gp.setPlaying(false);
+            case END: break;
+            default: break;
+            }
+        }
+        plugin.warpToLobby(player);
     }
 }

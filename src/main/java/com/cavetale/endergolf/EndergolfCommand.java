@@ -26,6 +26,9 @@ public final class EndergolfCommand extends AbstractCommand<EndergolfPlugin> {
             .hidden(true)
             .description("Start a singleplayer game")
             .playerCaller(this::singleplayer);
+        rootNode.addChild("quit").denyTabCompletion()
+            .description("Quit this game")
+            .playerCaller(this::quit);
         mapVote = new MapVote(MinigameMatchType.ENDERGOLF);
         mapVote.setTitle(textOfChildren(plugin.getTitle(), text(" Practice", GRAY)));
         mapVote.setVoteBookCommandMaker(bw -> "/golf singleplayer " + bw.getPath());
@@ -62,5 +65,17 @@ public final class EndergolfCommand extends AbstractCommand<EndergolfPlugin> {
         player.sendMessage(textOfChildren(text("Starting game: ", WHITE),
                                           text(buildWorld.getName(), GREEN)));
         return true;
+    }
+
+    private void quit(Player player) {
+        final Game game = Game.in(player.getWorld());
+        if (game == null) {
+            throw new CommandWarn("You're not in a game");
+        }
+        if (plugin.getSaveTag().isEvent()) {
+            throw new CommandWarn("Cannot quit games during an event");
+        }
+        player.sendMessage(text("Quitting game...", YELLOW));
+        game.quit(player);
     }
 }
