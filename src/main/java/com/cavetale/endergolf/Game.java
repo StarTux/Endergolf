@@ -183,6 +183,9 @@ public final class Game {
         world.setGameRule(GameRule.DROWNING_DAMAGE, false);
         world.setGameRule(GameRule.LOCATOR_BAR, true);
         world.setViewDistance(32);
+        if (world.getWorldBorder().getSize() < 1024.0) {
+            world.getWorldBorder().setSize(1024.0);
+        }
     }
 
     private void loadAreas() {
