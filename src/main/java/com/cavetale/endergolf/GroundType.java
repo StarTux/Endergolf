@@ -29,6 +29,7 @@ public enum GroundType {
     SAND(0.65, 0, 0.25f, 1f, NamedTextColor.YELLOW),
     MUD(0.5, 0, 0.5f, 1.5f, color(0xa52a2a)),
     BOUNCY(1.0, 1.25, 1.0f, 2f, color(0x00ff00)),
+    STICKY(1, 0, 0, 0, NamedTextColor.GOLD),
     // Reset
     WATER(0, 0, 0f, 0f, color(0x2222ff)),
     LAVA(0, 0, 0f, 0f, NamedTextColor.DARK_RED),
@@ -90,8 +91,11 @@ public enum GroundType {
         if (floor == Material.MUD || floor == Material.DIRT_PATH || floor == Material.FARMLAND || Tag.SNOW.isTagged(floor)) {
             return MUD;
         }
-        if (floor == Material.SLIME_BLOCK || floor == Material.HONEY_BLOCK) {
+        if (floor == Material.SLIME_BLOCK) {
             return BOUNCY;
+        }
+        if (floor == Material.HONEY_BLOCK) {
+            return STICKY;
         }
         if (floor == Material.STONE
             || floor == Material.SMOOTH_STONE
