@@ -115,6 +115,7 @@ public final class Game {
     private UUID logTarget;
     private final Random random = new Random();
     private boolean singleplayer;
+    private boolean spawning;
     // Updated in tick()
     private Instant now;
     private List<Component> scoreLines = new ArrayList<>();
@@ -270,11 +271,13 @@ public final class Game {
         final Vec2i holeChunk = holeCenter.blockToChunk();
         world.getChunkAtAsync(holeChunk.x, holeChunk.z, (Consumer<Chunk>) chunk -> {
                 holeLocation.setYaw(180f); // MagicMap Icon
+                spawning = true;
                 world.spawn(holeLocation, ArmorStand.class, e -> {
                         e.setInvisible(true);
                         e.setGravity(false);
                         e.getAttribute(Attribute.WAYPOINT_TRANSMIT_RANGE).setBaseValue(60.000);
                     });
+                spawning = false;
                 chunk.addPluginChunkTicket(plugin);
                 scanChunk(chunk);
             });
@@ -947,7 +950,9 @@ public final class Game {
                 player.playSound(player, Sound.UI_TOAST_CHALLENGE_COMPLETE, SoundCategory.MASTER, 1f, 2f);
             }
             for (int i = 0; i < 3; i += 1) {
+                spawning = true;
                 Fireworks.spawnFirework(holeLocation);
+                spawning = false;
             }
             return false;
         }
@@ -1090,11 +1095,14 @@ public final class Game {
     }
 
     public FallingBlock spawnBall(Location location, Vector velocity) {
-        return world.spawn(location, FallingBlock.class, e -> {
+        spawning = true;
+        FallingBlock ball = world.spawn(location, FallingBlock.class, e -> {
                 e.setBlockData(Material.DRAGON_EGG.createBlockData());
                 e.setVelocity(velocity);
                 Entities.setTransient(e);
             });
+        spawning = false;
+        return ball;
     }
 
     public void onPlayerHud(PlayerHudEvent event) {

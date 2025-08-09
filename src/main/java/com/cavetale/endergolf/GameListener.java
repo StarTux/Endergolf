@@ -14,6 +14,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityChangeBlockEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityExhaustionEvent;
+import org.bukkit.event.entity.EntitySpawnEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
@@ -38,15 +39,34 @@ public final class GameListener implements Listener {
         final Game game = Game.in(event.getEntity().getWorld());
         if (game == null) return;
         if (!(event.getEntity() instanceof FallingBlock falling)) return;
-        if (falling.getBlockData().getMaterial() != Material.DRAGON_EGG) return;
-        if (event.getTo() == Material.DRAGON_EGG) {
-            if (!game.onBallLand(falling, event.getBlock())) {
+        if (falling.getBlockData().getMaterial() == Material.DRAGON_EGG) {
+            if (event.getTo() == Material.DRAGON_EGG) {
+                if (!game.onBallLand(falling, event.getBlock())) {
+                    event.setCancelled(true);
+                    falling.remove();
+                }
+            } else {
                 event.setCancelled(true);
                 falling.remove();
             }
-        } else {
+        } else if (event.getTo().isAir()) {
+            // Avoid falling blocks.
             event.setCancelled(true);
-            falling.remove();
+        }
+    }
+
+    /**
+     * Avoid falling blocks.
+     */
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.LOWEST)
+    private void onEntitySpawn(EntitySpawnEvent event) {
+        final Game game = Game.in(event.getEntity().getWorld());
+        if (game == null) return;
+        if (game.isSpawning()) return;
+        switch (event.getEntity().getType()) {
+        case FALLING_BLOCK:
+            event.setCancelled(true);
+        default: break;
         }
     }
 
