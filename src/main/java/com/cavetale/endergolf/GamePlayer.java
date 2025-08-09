@@ -30,6 +30,7 @@ public final class GamePlayer {
     private String name;
     private boolean playing;
     private boolean finished;
+    private boolean disqualified;
     private boolean obsolete;
     private State state = State.INIT;
     private Vec3i bounceVector;

@@ -16,6 +16,7 @@ import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityExhaustionEvent;
 import org.bukkit.event.entity.EntitySpawnEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
+import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
@@ -127,5 +128,13 @@ public final class GameListener implements Listener {
         if (event.getEntity() instanceof Player) {
             event.setCancelled(true);
         }
+    }
+
+    @EventHandler
+    private void onPlayerDropItem(PlayerDropItemEvent event) {
+        if (event.getPlayer().isOp()) return;
+        final Game game = Game.in(event.getPlayer().getWorld());
+        if (game == null) return;
+        event.setCancelled(true);
     }
 }

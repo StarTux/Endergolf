@@ -464,7 +464,7 @@ public final class Game {
                     if (!gp.isObsolete()) {
                         notObsolete += 1;
                     }
-                    if (!gp.isFinished()) {
+                    if (!gp.isFinished() && !gp.isDisqualified()) {
                         totalNotFinished += 1;
                     }
                 }
@@ -485,6 +485,7 @@ public final class Game {
                 if (gp.getStrokeCount() > maxStrokes) {
                     gp.setState(GamePlayer.State.DNF);
                     gp.setFinishedSince(now);
+                    gp.setDisqualified(true);
                     final Player player = gp.getPlayer();
                     if (player != null) {
                         player.showTitle(title(text("Blow Up", DARK_RED),
@@ -531,6 +532,7 @@ public final class Game {
                     player.getInventory().addItem(Mytems.BINOCULARS.createItemStack());
                     player.getInventory().setItemInOffHand(Mytems.MAGIC_MAP.createItemStack());
                     player.getInventory().setBoots(Mytems.SNEAKERS.createItemStack());
+                    player.getInventory().addItem(Mytems.BLIND_EYE.createItemStack());
                     player.getInventory().addItem(makeMulliganItem());
                 }
                 updateBallCompass(player, gp);
@@ -605,6 +607,7 @@ public final class Game {
                 gp.setObsolete(true);
                 gp.setState(GamePlayer.State.OBSOLETE);
                 gp.clearPreviewEntities();
+                gp.setDisqualified(true);
                 player.showTitle(title(text("Timeout", DARK_RED),
                                        text("Disqualified", DARK_RED),
                                        times(Duration.ofSeconds(1),
@@ -884,9 +887,23 @@ public final class Game {
                         .eq("mapPath", buildWorld.getPath())
                         .eq("player", gp.getUuid())
                         .findUnique();
+                    boolean didAnnounce = false;
+                    if (globalBest > 0 && strokes < globalBest) {
+                        globalBest = strokes;
+                        final Component message = textOfChildren(Mytems.GOLD_MEDAL,
+                                                                 text(" " + gp.getName(), GREEN),
+                                                                 text(" got a new best of all time: ", WHITE),
+                                                                 text(strokes, GREEN));
+                        for (Player p : getPresentPlayers()) {
+                            p.sendMessage(message);
+                        }
+                        didAnnounce = true;
+                    }
+                    final boolean didAnnounce2 = didAnnounce;
                     if (best == null) {
                         plugin.getDatabase().insert(new SQLMapPlayerBest(buildWorld.getPath(), gp.getUuid(), gp.getStrokeCount(), new Date()));
                         Bukkit.getScheduler().runTask(plugin, () -> {
+                                if (didAnnounce2) return;
                                 final Player player = gp.getPlayer();
                                 if (player == null) return;
                                 player.sendMessage(textOfChildren(text("First personal best on ", WHITE),
@@ -899,24 +916,14 @@ public final class Game {
                         best.setTime(new Date());
                         plugin.getDatabase().update(best);
                         Bukkit.getScheduler().runTask(plugin, () -> {
+                                if (didAnnounce2) return;
                                 final Player player = gp.getPlayer();
                                 if (player == null) return;
-                                if (globalBest > 0 && strokes < globalBest) {
-                                    globalBest = strokes;
-                                    final Component message = textOfChildren(Mytems.GOLD_MEDAL,
-                                                                             text(" " + gp.getName(), GREEN),
-                                                                             text(" got a new best of all time: ", WHITE),
-                                                                             text(strokes, GREEN));
-                                    for (Player p : getPresentPlayers()) {
-                                        p.sendMessage(message);
-                                    }
-                                } else {
-                                    player.sendMessage(textOfChildren(Mytems.GOLD_MEDAL,
-                                                                      text(" New personal best on ", WHITE),
-                                                                      text(buildWorld.getName(), GREEN),
-                                                                      text(": ", WHITE),
-                                                                      text(strokes, GREEN)));
-                                }
+                                player.sendMessage(textOfChildren(Mytems.GOLD_MEDAL,
+                                                                  text(" New personal best on ", WHITE),
+                                                                  text(buildWorld.getName(), GREEN),
+                                                                  text(": ", WHITE),
+                                                                  text(strokes, GREEN)));
                             });
                     }
                 });
@@ -1180,8 +1187,11 @@ public final class Game {
 
     public void onPlayerUseCompass(Player player) {
         final GamePlayer gp = getGamePlayer(player);
-        if (gp == null || !gp.isPlaying() || gp.isFinished()) return;
-        teleport(player, directAtHole(gp.getBallVector().toCenterFloorLocation(world).add(0.0, 1.0, 0.0)));
+        if (gp == null || !gp.isPlaying() || gp.isFinished() || gp.isDisqualified() || gp.isObsolete()) {
+            player.setGameMode(GameMode.SPECTATOR);
+        } else {
+            teleport(player, directAtHole(gp.getBallVector().toCenterFloorLocation(world).add(0.0, 1.0, 0.0)));
+        }
         player.playSound(player, Sound.ENTITY_ENDERMAN_TELEPORT, SoundCategory.MASTER, 1f, 1f);
     }
 

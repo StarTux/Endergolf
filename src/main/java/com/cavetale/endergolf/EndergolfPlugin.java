@@ -3,6 +3,7 @@ package com.cavetale.endergolf;
 import com.cavetale.core.util.Json;
 import com.cavetale.endergolf.sql.SQLMapPlayerBest;
 import com.cavetale.fam.trophy.Highscore;
+import com.cavetale.mytems.Mytems;
 import com.cavetale.mytems.item.trophy.TrophyCategory;
 import com.winthier.sql.SQLDatabase;
 import java.io.File;
@@ -74,6 +75,7 @@ public final class EndergolfPlugin extends JavaPlugin {
         player.setGameMode(GameMode.ADVENTURE);
         player.setAllowFlight(false);
         player.setFlying(false);
+        player.getInventory().addItem(Mytems.BLIND_EYE.createItemStack());
     }
 
     public void loadSaveTag() {
