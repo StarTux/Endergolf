@@ -525,6 +525,7 @@ public final class Game {
                     player.getInventory().addItem(Mytems.BINOCULARS.createItemStack());
                     player.getInventory().setItemInOffHand(Mytems.MAGIC_MAP.createItemStack());
                     player.getInventory().setBoots(Mytems.SNEAKERS.createItemStack());
+                    player.getInventory().addItem(makeMulliganItem());
                 }
                 updateBallCompass(player, gp);
             }
@@ -778,6 +779,11 @@ public final class Game {
             onPlayerUseCompass(event.getPlayer());
             return;
         }
+        if (event.hasItem() && (event.getAction() == Action.RIGHT_CLICK_BLOCK || event.getAction() == Action.RIGHT_CLICK_AIR) && event.getItem().getType() == Material.ARROW) {
+            event.setCancelled(true);
+            onPlayerUseMulligan(event.getPlayer());
+            return;
+        }
         if (!event.hasBlock() || (event.getAction() != Action.LEFT_CLICK_BLOCK && event.getAction() != Action.RIGHT_CLICK_BLOCK)) {
             // Adventure GameMode appears to always send
             // RIGHT_CLICK_BLOCK followed by LEFT_CLICK_BLOCK when the
@@ -855,6 +861,7 @@ public final class Game {
         if (holeArea.contains(blockVector)) {
             // Hole In (or Out), Finish
             gp.setFinished(true);
+            gp.setPreviousBallVector(null);
             gp.setBallVector(blockVector);
             gp.setBounceVector(null);
             gp.setState(GamePlayer.State.FINISH);
@@ -954,6 +961,7 @@ public final class Game {
             boolean rescued = false;
             if (gp.getBounceVector() != null) {
                 rescued = true;
+                gp.setPreviousBallVector(gp.getBallVector());
                 gp.setBallVector(gp.getBounceVector());
                 gp.setBounceVector(null);
                 gp.setGroundType(GroundType.at(gp.getBallVector().toBlock(world)));
@@ -1002,7 +1010,10 @@ public final class Game {
             // Land for real
             log("" + gp.getName() + " land at " + blockVector);
             final int distance = blockVector.toVec2i().roundedDistance(gp.getBallVector().toVec2i());
-            gp.setBallVector(blockVector);
+            if (!blockVector.equals(gp.getBallVector())) {
+                gp.setPreviousBallVector(gp.getBallVector());
+                gp.setBallVector(blockVector);
+            }
             gp.setBounceVector(null);
             gp.setDistance(gp.getBallVector().toVec2i().roundedDistance(holeArea.getCenter().toVec2i()));
             gp.setFlightBall(null);
@@ -1163,6 +1174,29 @@ public final class Game {
         player.playSound(player, Sound.ENTITY_ENDERMAN_TELEPORT, SoundCategory.MASTER, 1f, 1f);
     }
 
+    public void onPlayerUseMulligan(Player player) {
+        final GamePlayer gp = getGamePlayer(player);
+        if (gp == null || !gp.isPlaying() || gp.isFinished()) return;
+        if (gp.getState() != GamePlayer.State.STROKE) {
+            player.sendMessage(text("Please wait your turn", DARK_RED));
+            player.playSound(player, Sound.UI_BUTTON_CLICK, SoundCategory.MASTER, 1f, 0.5f);
+            return;
+        }
+        if (gp.getPreviousBallVector() == null) {
+            player.sendMessage(text("You cannot go back", DARK_RED));
+            player.playSound(player, Sound.UI_BUTTON_CLICK, SoundCategory.MASTER, 1f, 0.5f);
+            return;
+        }
+        gp.getStroke().disable();
+        gp.setStroke(null);
+        gp.clearPreviewEntities();
+        gp.setBallVector(gp.getPreviousBallVector());
+        gp.setPreviousBallVector(null);
+        gp.setState(GamePlayer.State.WAIT);
+        gp.setWaitingSince(now);
+        player.playSound(player, Sound.ITEM_LEAD_BREAK, SoundCategory.MASTER, 1f, 0.75f);
+    }
+
     public ItemStack makeBallCompass() {
         final ItemStack item = new ItemStack(Material.COMPASS);
         item.setData(DataComponentTypes.LODESTONE_TRACKER, lodestoneTracker().tracked(true).location(teeVector.toCenterLocation(world)));
@@ -1182,6 +1216,20 @@ public final class Game {
             if (item == null || item.getType() != Material.COMPASS) continue;
             item.setData(DataComponentTypes.LODESTONE_TRACKER, lodestoneTracker().tracked(false).location(gp.getBallVector().toCenterLocation(world)));
         }
+    }
+
+    public ItemStack makeMulliganItem() {
+        final ItemStack item = new ItemStack(Material.ARROW);
+        item.setData(DataComponentTypes.LODESTONE_TRACKER, lodestoneTracker().tracked(true).location(teeVector.toCenterLocation(world)));
+        item.setData(DataComponentTypes.CUSTOM_NAME, text("Mulligan", DARK_RED));
+        final List<Component> lore = List.of(text(tiny("Put the ball back to"), GRAY).decoration(ITALIC, false),
+                                             text(tiny("where it was before"), GRAY).decoration(ITALIC, false),
+                                             text(tiny("the previous stroke."), GRAY).decoration(ITALIC, false),
+                                             empty(),
+                                             textOfChildren(Mytems.MOUSE_RIGHT, text(" Do-Over", GRAY)).decoration(ITALIC, false));
+        item.setData(DataComponentTypes.LORE, lore(lore));
+        item.setData(DataComponentTypes.ITEM_MODEL, Mytems.REDO.getNamespacedKey());
+        return item;
     }
 
     public boolean determineWinners() {

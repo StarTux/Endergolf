@@ -34,6 +34,7 @@ public final class GamePlayer {
     private State state = State.INIT;
     private Vec3i bounceVector;
     private Vec3i ballVector;
+    private Vec3i previousBallVector;
     private int distance;
     // Wait
     private Instant waitingSince;
