@@ -93,7 +93,7 @@ public final class EndergolfPlugin extends JavaPlugin {
     public int rewardHighscore() {
         return Highscore.reward(saveTag.getScores(),
                                 "endergolf",
-                                TrophyCategory.CUP,
+                                TrophyCategory.GOLF,
                                 title,
                                 hi -> "You scored " + hi.score + " point" + (hi.score > 1 ? "s" : ""));
     }
