@@ -366,7 +366,7 @@ public final class Game {
             MapReview.stop(world);
             world.removePluginChunkTickets(plugin);
             for (Player player : world.getPlayers()) {
-                plugin.warpToLobby(player);
+                plugin.getLobby().warp(player);
             }
             Files.deleteWorld(world);
             world = null;
@@ -1247,7 +1247,6 @@ public final class Game {
 
     public ItemStack makeMulliganItem() {
         final ItemStack item = new ItemStack(Material.ARROW);
-        item.setData(DataComponentTypes.LODESTONE_TRACKER, lodestoneTracker().tracked(true).location(teeVector.toCenterLocation(world)));
         item.setData(DataComponentTypes.CUSTOM_NAME, text("Mulligan", DARK_RED));
         final List<Component> lore = List.of(text(tiny("Put the ball back to"), GRAY).decoration(ITALIC, false),
                                              text(tiny("where it was before"), GRAY).decoration(ITALIC, false),
@@ -1386,6 +1385,6 @@ public final class Game {
             default: break;
             }
         }
-        plugin.warpToLobby(player);
+        plugin.getLobby().warp(player);
     }
 }

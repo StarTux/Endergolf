@@ -3,19 +3,13 @@ package com.cavetale.endergolf;
 import com.cavetale.core.util.Json;
 import com.cavetale.endergolf.sql.SQLMapPlayerBest;
 import com.cavetale.fam.trophy.Highscore;
-import com.cavetale.mytems.Mytems;
 import com.cavetale.mytems.item.trophy.TrophyCategory;
 import com.winthier.sql.SQLDatabase;
 import java.io.File;
 import java.util.List;
 import lombok.Getter;
 import net.kyori.adventure.text.Component;
-import org.bukkit.Bukkit;
-import org.bukkit.GameMode;
-import org.bukkit.attribute.Attribute;
-import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.potion.PotionEffect;
 import static net.kyori.adventure.text.Component.text;
 import static net.kyori.adventure.text.Component.textOfChildren;
 import static net.kyori.adventure.text.format.NamedTextColor.*;
@@ -32,6 +26,7 @@ public final class EndergolfPlugin extends JavaPlugin {
     private final Component title = textOfChildren(text("Ender", GREEN),
                                                    text("golf", WHITE));
     private final SQLDatabase database = new SQLDatabase(this);
+    private final Lobby lobby = new Lobby(this);
 
     public EndergolfPlugin() {
         instance = this;
@@ -47,6 +42,7 @@ public final class EndergolfPlugin extends JavaPlugin {
         computeHighscore();
         database.registerTables(List.of(SQLMapPlayerBest.class));
         database.createAllTables();
+        lobby.enable();
     }
 
     @Override
@@ -59,23 +55,6 @@ public final class EndergolfPlugin extends JavaPlugin {
 
     public static EndergolfPlugin endergolfPlugin() {
         return instance;
-    }
-
-    public void warpToLobby(Player player) {
-        player.eject();
-        player.leaveVehicle();
-        player.setHealth(player.getAttribute(Attribute.MAX_HEALTH).getValue());
-        player.setFoodLevel(20);
-        player.setSaturation(20f);
-        for (PotionEffect effect : player.getActivePotionEffects()) {
-            player.removePotionEffect(effect.getType());
-        }
-        player.getInventory().clear();
-        player.teleport(Bukkit.getWorlds().get(0).getSpawnLocation());
-        player.setGameMode(GameMode.ADVENTURE);
-        player.setAllowFlight(false);
-        player.setFlying(false);
-        player.getInventory().addItem(Mytems.BLIND_EYE.createItemStack());
     }
 
     public void loadSaveTag() {

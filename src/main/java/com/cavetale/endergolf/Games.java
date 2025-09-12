@@ -63,9 +63,8 @@ public final class Games {
                 }
             }
         }
-        final World lobbyWorld = Bukkit.getWorlds().get(0);
         int notAfk = 0;
-        for (Player player : lobbyWorld.getPlayers()) {
+        for (Player player : plugin.getLobby().getPlayers()) {
             if (!AFKPlugin.isAfk(player)) notAfk += 1;
         }
         if (MapVote.isActive(MinigameMatchType.ENDERGOLF)) {
@@ -78,12 +77,12 @@ public final class Games {
                         mapVote.setTitle(plugin.getTitle());
                         mapVote.setCallback(mapVoteResult -> {
                                 final Game game = new Game(plugin, mapVoteResult.getBuildWorldWinner());
-                                for (Player player : lobbyWorld.getPlayers()) {
+                                for (Player player : plugin.getLobby().getPlayers()) {
                                     game.addPlayer(player);
                                 }
                                 game.setWorldAndEnable(mapVoteResult.getLocalWorldCopy());
                             });
-                        mapVote.setLobbyWorld(lobbyWorld);
+                        mapVote.setLobbyWorld(plugin.getLobby().getWorld());
                         mapVote.setAvoidRepetition(0);
                     });
             }

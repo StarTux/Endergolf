@@ -9,7 +9,6 @@ import com.cavetale.core.playercache.PlayerCache;
 import com.winthier.creative.BuildWorld;
 import java.util.ArrayList;
 import java.util.List;
-import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import static net.kyori.adventure.text.Component.text;
@@ -75,7 +74,7 @@ public final class EndergolfAdminCommand extends AbstractCommand<EndergolfPlugin
         if (sender instanceof Player player) {
             game.setLogTarget(player.getUniqueId());
         }
-        for (Player player : Bukkit.getWorlds().get(0).getPlayers()) {
+        for (Player player : plugin.getLobby().getPlayers()) {
             game.addPlayer(player);
         }
         if (game.getPlayers().isEmpty()) {

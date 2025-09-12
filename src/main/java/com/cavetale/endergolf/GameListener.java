@@ -1,7 +1,6 @@
 package com.cavetale.endergolf;
 
 import com.cavetale.core.event.hud.PlayerHudEvent;
-import com.cavetale.core.event.hud.PlayerHudPriority;
 import com.cavetale.magicmap.event.MagicMapCursorEvent;
 import lombok.RequiredArgsConstructor;
 import org.bukkit.Bukkit;
@@ -73,10 +72,6 @@ public final class GameListener implements Listener {
 
     @EventHandler
     private void onPlayerHud(PlayerHudEvent event) {
-        if (plugin.getSaveTag().isEvent() && event.getPlayer().getWorld().equals(Bukkit.getWorlds().get(0))) {
-            event.sidebar(PlayerHudPriority.HIGH, plugin.getHighscoreLines());
-            return;
-        }
         final Game game = Game.in(event.getPlayer().getWorld());
         if (game == null) return;
         game.onPlayerHud(event);
@@ -113,7 +108,6 @@ public final class GameListener implements Listener {
     @EventHandler
     private void onEntityDamage(EntityDamageEvent event) {
         if (!(event.getEntity() instanceof Player player)) return;
-        event.setCancelled(true);
         if (event.getCause() == EntityDamageEvent.DamageCause.VOID) {
             final Game game = Game.in(event.getEntity().getWorld());
             if (game == null) return;
@@ -125,9 +119,9 @@ public final class GameListener implements Listener {
 
     @EventHandler
     private void onEntityExhaustion(EntityExhaustionEvent event) {
-        if (event.getEntity() instanceof Player) {
-            event.setCancelled(true);
-        }
+        final Game game = Game.in(event.getEntity().getWorld());
+        if (game == null) return;
+        event.setCancelled(true);
     }
 
     @EventHandler
