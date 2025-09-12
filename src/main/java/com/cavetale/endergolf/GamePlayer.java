@@ -41,6 +41,7 @@ public final class GamePlayer {
     private Instant waitingSince;
     private Instant offlineSince;
     private Instant strokeCooldown = Instant.EPOCH;
+    private String waitingFor;
     // Stroke
     private Stroke stroke;
     private int strokeCount;

@@ -459,6 +459,7 @@ public final class Game {
             totalNotFinished = 0;
             for (GamePlayer gp : players.values()) {
                 tickPlay(gp);
+                gp.setWaitingFor(null);
                 if (gp.isPlaying()) {
                     totalPlaying += 1;
                     if (!gp.isObsolete()) {
@@ -505,6 +506,7 @@ public final class Game {
                     // Distance must be at least 4
                     if (stroke.getBallVector().distanceSquared(gp.getBallVector()) < 16.0) {
                         tooClose = true;
+                        gp.setWaitingFor(stroke.getGamePlayer().getName());
                         break;
                     }
                 }
@@ -1137,7 +1139,11 @@ public final class Game {
             }
             switch (gp.getState()) {
             case WAIT:
-                event.bossbar(PlayerHudPriority.HIGH, text("Please Wait for Others", GRAY), BossBar.Color.WHITE, BossBar.Overlay.PROGRESS, 0f);
+                if (gp.getWaitingFor() != null) {
+                    event.bossbar(PlayerHudPriority.HIGH, text("Waiting for " + gp.getWaitingFor(), GRAY), BossBar.Color.WHITE, BossBar.Overlay.PROGRESS, 0f);
+                } else {
+                    event.bossbar(PlayerHudPriority.HIGH, text("Please wait for others", GRAY), BossBar.Color.WHITE, BossBar.Overlay.PROGRESS, 0f);
+                }
                 break;
             case STROKE:
                 event.bossbar(PlayerHudPriority.HIGH, text("You're Up", GREEN), BossBar.Color.GREEN, BossBar.Overlay.NOTCHED_20, gp.getStrokeProgress());
