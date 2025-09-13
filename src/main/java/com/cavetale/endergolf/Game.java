@@ -1425,6 +1425,7 @@ public final class Game {
         if (block.isEmpty() || block.isLiquid()) return false;
         if (block.getType() == Material.DRAGON_EGG) return false;
         if (GroundType.at(block).isReset()) return false;
+        if (block.getRelative(0, 1, 0).isLiquid()) return false;
         final Vec3i result = Vec3i.of(block).add(0, 1, 0);
         if (!gamePlayer.spawnCoin(result, player)) return false;
         log("Spawned coin for " + player.getName() + " at " + result);
