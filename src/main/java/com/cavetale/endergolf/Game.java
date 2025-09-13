@@ -701,7 +701,7 @@ public final class Game {
         case OBSOLETE: break;
         default: break;
         }
-        if (gp.isPlaying() && plugin.getSaveTag().isEvent()) {
+        if (gp.isPlaying() && !gp.isDisqualified() && plugin.getSaveTag().isEvent()) {
             // All the coin logic goes here
             if (gp.getCoinCooldown() == null) {
                 gp.setCoinCooldown(now.plus(Duration.ofSeconds(5)));
