@@ -784,6 +784,10 @@ public final class Game {
         return world.getName();
     }
 
+    public Location getTeeLocation() {
+        return teeVector.toCenterLocation(world);
+    }
+
     public void teleport(Player player, Location location) {
         player.eject();
         player.leaveVehicle();

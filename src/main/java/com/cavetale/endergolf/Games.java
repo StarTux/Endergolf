@@ -7,12 +7,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
 
+@Getter
 @RequiredArgsConstructor
 public final class Games {
     private final EndergolfPlugin plugin;
@@ -32,6 +34,14 @@ public final class Games {
             game.disable();
         }
         worldGameMap.clear();
+    }
+
+    public boolean isEmpty() {
+        return worldGameMap.isEmpty();
+    }
+
+    public Game getAnyGame() {
+        return worldGameMap.values().iterator().next();
     }
 
     public void addAndEnable(Game game) {

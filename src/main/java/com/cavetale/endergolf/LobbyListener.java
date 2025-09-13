@@ -4,6 +4,7 @@ import com.cavetale.core.event.hud.PlayerHudEvent;
 import com.cavetale.core.event.hud.PlayerHudPriority;
 import lombok.RequiredArgsConstructor;
 import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -63,8 +64,15 @@ public final class LobbyListener implements Listener {
 
     @EventHandler
     private void onPlayerJoin(PlayerJoinEvent event) {
-        if (!lobby.isInWorld(event.getPlayer())) return;
-        lobby.onJoin(event.getPlayer());
+        final Player player = event.getPlayer();
+        if (!lobby.isInWorld(player)) return;
+        if (plugin.getSaveTag().isEvent() && !plugin.getGames().isEmpty()) {
+            final Game game = plugin.getGames().getAnyGame();
+            game.teleport(player, game.getTeeLocation());
+            player.setGameMode(GameMode.SPECTATOR);
+        } else {
+            lobby.onJoin(player);
+        }
     }
 
     @EventHandler(ignoreCancelled = false, priority = EventPriority.LOWEST)
