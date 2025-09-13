@@ -5,6 +5,7 @@ import com.cavetale.core.event.hud.PlayerHudPriority;
 import lombok.RequiredArgsConstructor;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -36,6 +37,9 @@ public final class LobbyListener implements Listener {
     private void onEntityDamage(EntityDamageEvent event) {
         if (!lobby.isInWorld(event.getEntity())) return;
         event.setCancelled(true);
+        if (event.getCause() == EntityDamageEvent.DamageCause.VOID && event.getEntity() instanceof Player player) {
+            Bukkit.getScheduler().runTask(plugin, () -> lobby.warp(player));
+        }
     }
 
     @EventHandler
