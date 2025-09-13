@@ -1313,15 +1313,16 @@ public final class Game {
         for (GamePlayer gp : winners) event.addWinnerUuid(gp.getUuid());
         event.callEvent();
         // Event
-        int bonus = 3;
         if (plugin.getSaveTag().isEvent()) {
+            // Bonus: 10, 7, 4, 1
+            int bonus = 10;
             int lastStrokes = finishers.get(0).getStrokeCount();
             final List<String> commandNames = new ArrayList<>();
             for (GamePlayer gp : finishers) {
                 commandNames.add(gp.getName());
                 plugin.getSaveTag().addScore(gp.getUuid(), 1);
                 if (lastStrokes != gp.getStrokeCount()) {
-                    bonus -= 1;
+                    bonus -= 3;
                     lastStrokes = gp.getStrokeCount();
                 }
                 if (bonus > 0) {
