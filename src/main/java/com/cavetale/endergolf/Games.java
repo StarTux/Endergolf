@@ -93,7 +93,6 @@ public final class Games {
                                 game.setWorldAndEnable(mapVoteResult.getLocalWorldCopy());
                             });
                         mapVote.setLobbyWorld(plugin.getLobby().getWorld());
-                        mapVote.setAvoidRepetition(0);
                     });
             }
         }
