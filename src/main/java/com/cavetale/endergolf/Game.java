@@ -1421,13 +1421,17 @@ public final class Game {
     public boolean tryToSpawnCoin(GamePlayer gamePlayer, Player player) {
         if (safeCoinVectors.isEmpty()) return false;
         final Vec3i base = safeCoinVectors.get(random.nextInt(safeCoinVectors.size()));
-        Block block = world.getHighestBlockAt(base.x + random.nextInt(33) - 16,
-                                              base.z + random.nextInt(33) - 16);
+        Block block = base.add(random.nextInt(33) - 16, 0, random.nextInt(33) - 16).toBlock(world);
+        // Up while block is "empty"
+        while (block.getY() < world.getMaxHeight() && !block.getCollisionShape().getBoundingBoxes().isEmpty()) {
+            block = block.getRelative(0, 1, 0);
+        }
+        // Down while block is "not empty"
         while (block.getY() > world.getMinHeight() && block.getCollisionShape().getBoundingBoxes().isEmpty()) {
             block = block.getRelative(0, -1, 0);
         }
         if (block.isEmpty() || block.isLiquid()) return false;
-        if (block.getType() == Material.DRAGON_EGG) return false;
+        if (block.getType() == Material.DRAGON_EGG || block.getType() == Material.BARRIER) return false;
         if (GroundType.at(block).isReset()) return false;
         if (block.getRelative(0, 1, 0).isLiquid()) return false;
         final Vec3i result = Vec3i.of(block).add(0, 1, 0);
