@@ -1,9 +1,12 @@
 package com.cavetale.endergolf;
 
 import com.cavetale.core.struct.Vec3i;
+import com.cavetale.mytems.Mytems;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import lombok.Data;
 import net.kyori.adventure.text.Component;
@@ -59,6 +62,9 @@ public final class GamePlayer {
     private Location windLocation;
     private Vector windVector;
     private Component windComponent;
+    // Coins
+    private Instant coinCooldown;
+    private final Map<Vec3i, ItemDisplay> coins = new HashMap<>();
 
     public enum State {
         INIT,
@@ -147,5 +153,30 @@ public final class GamePlayer {
         }
         previewEntities.clear();
         previewEntitySize = 0;
+    }
+
+    private static final Transformation COIN_TRANS = new Transformation(new Vector3f(0f, 0f, 0f),
+                                                                        new AxisAngle4f(0f, 0f, 0f, 0f),
+                                                                        new Vector3f(0.66f, 0.66f, 0.66f),
+                                                                        new AxisAngle4f(0f, 0f, 0f, 0f));
+
+    public boolean spawnCoin(Vec3i vector, Player player) {
+        if (coins.containsKey(vector)) return false;
+        for (Vec3i old : coins.keySet()) {
+            if (old.maxHorizontalDistance(vector) < 16) return false;
+        }
+        final Location location = vector.toCenterLocation(game.getWorld());
+        final ItemDisplay coin = location.getWorld().spawn(location, ItemDisplay.class, e -> {
+                e.setItemStack(Mytems.GOLDEN_COIN.createItemStack());
+                e.setTransformation(COIN_TRANS);
+                e.setBillboard(ItemDisplay.Billboard.CENTER);
+                e.setVisibleByDefault(false);
+                e.setViewRange(512f);
+                e.setShadowRadius(0.25f);
+                e.setShadowStrength(1f);
+                player.showEntity(game.getPlugin(), e);
+            });
+        coins.put(vector, coin);
+        return true;
     }
 }

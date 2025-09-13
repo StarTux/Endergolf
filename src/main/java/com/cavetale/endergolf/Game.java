@@ -125,6 +125,7 @@ public final class Game {
     private long countdownSeconds;
     // Play
     private boolean doDebugGravity = false;
+    private List<Vec3i> safeCoinVectors = new ArrayList<>();
     // End
     private Instant endStart;
     private Instant endStop;
@@ -518,6 +519,7 @@ public final class Game {
                     : 30;
                 final Stroke stroke = new Stroke(this, gp, gp.getBallVector(), now, now.plus(Duration.ofSeconds(seconds)));
                 strokes.add(stroke);
+                safeCoinVectors.add(gp.getBallVector());
                 stroke.enable();
                 gp.setStroke(stroke);
                 gp.setState(GamePlayer.State.STROKE);
@@ -698,6 +700,28 @@ public final class Game {
         }
         case OBSOLETE: break;
         default: break;
+        }
+        if (gp.isPlaying() && plugin.getSaveTag().isEvent()) {
+            // All the coin logic goes here
+            if (gp.getCoinCooldown() == null) {
+                gp.setCoinCooldown(now.plus(Duration.ofSeconds(5)));
+            } else if (gp.getCoinCooldown().isBefore(now)) {
+                if (tryToSpawnCoin(gp, player)) {
+                    gp.setCoinCooldown(now.plus(Duration.ofSeconds(20)));
+                }
+            }
+            for (Vec3i playerVector : List.of(Vec3i.of(player.getLocation()), Vec3i.of(player.getEyeLocation()))) {
+                if (gp.getCoins().containsKey(playerVector)) {
+                    // Collect coin
+                    gp.getCoins().remove(playerVector).remove();
+                    plugin.getSaveTag().addScore(gp.getUuid(), 1);
+                    plugin.computeHighscore();
+                    log(player.getName() + " collected coin at " + playerVector);
+                    player.playSound(playerVector.toCenterLocation(world), Sound.ENTITY_ITEM_PICKUP, SoundCategory.MASTER, 0.5f, 2f);
+                    player.spawnParticle(Particle.BLOCK, playerVector.toCenterLocation(world), 32, 0.25f, 0.25f, 0.25f, 0f, Material.GOLD_BLOCK.createBlockData());
+                    player.sendMessage(textOfChildren(Mytems.GOLDEN_COIN, text(" You picked up one point!", GOLD, BOLD)));
+                }
+            }
         }
     }
 
@@ -957,6 +981,7 @@ public final class Game {
                                              Duration.ofSeconds(3),
                                              Duration.ofSeconds(1))));
                 player.playSound(player, Sound.UI_TOAST_CHALLENGE_COMPLETE, SoundCategory.MASTER, 1f, 2f);
+                player.sendMessage(textOfChildren(Mytems.MASTER_FINDER, text(" Use your Ball Compass to spectate", GREEN, BOLD)));
             }
             for (int i = 0; i < 3; i += 1) {
                 spawning = true;
@@ -1387,5 +1412,22 @@ public final class Game {
             }
         }
         plugin.getLobby().warp(player);
+    }
+
+    public boolean tryToSpawnCoin(GamePlayer gamePlayer, Player player) {
+        if (safeCoinVectors.isEmpty()) return false;
+        final Vec3i base = safeCoinVectors.get(random.nextInt(safeCoinVectors.size()));
+        Block block = world.getHighestBlockAt(base.x + random.nextInt(33) - 16,
+                                              base.z + random.nextInt(33) - 16);
+        while (block.getY() > world.getMinHeight() && block.getCollisionShape().getBoundingBoxes().isEmpty()) {
+            block = block.getRelative(0, -1, 0);
+        }
+        if (block.isEmpty() || block.isLiquid()) return false;
+        if (block.getType() == Material.DRAGON_EGG) return false;
+        if (GroundType.at(block).isReset()) return false;
+        final Vec3i result = Vec3i.of(block).add(0, 1, 0);
+        if (!gamePlayer.spawnCoin(result, player)) return false;
+        log("Spawned coin for " + player.getName() + " at " + result);
+        return true;
     }
 }
