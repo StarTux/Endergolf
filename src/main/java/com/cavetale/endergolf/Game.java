@@ -184,7 +184,8 @@ public final class Game {
         world.setGameRule(GameRule.FALL_DAMAGE, false);
         world.setGameRule(GameRule.DROWNING_DAMAGE, false);
         world.setGameRule(GameRule.LOCATOR_BAR, true);
-        world.setGameRule(GameRule.PVP, true);
+        world.setGameRule(GameRule.PVP, false);
+        world.setGameRule(GameRule.FIRE_DAMAGE, false);
         world.setViewDistance(32);
         if (world.getWorldBorder().getSize() < 1024.0) {
             world.getWorldBorder().setSize(1024.0);
