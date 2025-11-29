@@ -10,7 +10,6 @@ import com.cavetale.fam.trophy.Highscore;
 import com.winthier.creative.BuildWorld;
 import java.util.ArrayList;
 import java.util.List;
-import net.kyori.adventure.text.Component;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import static net.kyori.adventure.text.Component.text;
@@ -155,9 +154,6 @@ public final class EndergolfAdminCommand extends AbstractCommand<EndergolfPlugin
         plugin.computeHighscore();
         final int count = plugin.rewardHighscore();
         sender.sendMessage(text(count + " scores rewarded", YELLOW));
-        sender.sendMessage(text("Money rewards:", GRAY));
-        for (Component line : Highscore.rewardMoneyWithFeedback(plugin, plugin.getSaveTag().getScores(), "Endergolf")) {
-            sender.sendMessage(line);
-        }
+        Highscore.rewardMoneyWithFeedback(sender, plugin, plugin.getSaveTag().getScores(), "Endergolf");
     }
 }
