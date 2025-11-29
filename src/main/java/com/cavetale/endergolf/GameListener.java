@@ -108,12 +108,11 @@ public final class GameListener implements Listener {
     @EventHandler
     private void onEntityDamage(EntityDamageEvent event) {
         if (!(event.getEntity() instanceof Player player)) return;
+        final Game game = Game.in(event.getEntity().getWorld());
+        if (game == null) return;
+        event.setCancelled(true);
         if (event.getCause() == EntityDamageEvent.DamageCause.VOID) {
-            final Game game = Game.in(event.getEntity().getWorld());
-            if (game == null) return;
-            if (game != null) {
-                Bukkit.getScheduler().runTask(plugin, () -> game.teleport(player, game.getWorld().getSpawnLocation()));
-            }
+            Bukkit.getScheduler().runTask(plugin, () -> game.teleport(player, game.getWorld().getSpawnLocation()));
         }
     }
 
