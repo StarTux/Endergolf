@@ -2,7 +2,7 @@ main: com.cavetale.endergolf.EndergolfPlugin
 name: Endergolf
 
 version: ${version}
-api-version: '1.21.10'
+api-version: '1.21.11'
 
 author: StarTux
 website: https://github.com/StarTux/Endergolf
