@@ -31,7 +31,7 @@ public final class EndergolfCommand extends AbstractCommand<EndergolfPlugin> {
             .playerCaller(this::quit);
         mapVote = new MapVote(MinigameMatchType.ENDERGOLF);
         mapVote.setTitle(textOfChildren(plugin.getTitle(), text(" Practice", GRAY)));
-        mapVote.setVoteBookCommandMaker(bw -> "/golf singleplayer " + bw.getPath());
+        mapVote.setVoteCallback((player, buildWorld) -> player.performCommand("golf singleplayer " + buildWorld.getPath()));
         mapVote.setAvoidRepetition(0);
         mapVote.load();
     }
@@ -43,7 +43,7 @@ public final class EndergolfCommand extends AbstractCommand<EndergolfPlugin> {
         if (plugin.getSaveTag().isEvent()) {
             throw new CommandWarn("Cannot play alone during an event");
         }
-        mapVote.openVoteBook(player);
+        mapVote.openVoteDialog(player);
     }
 
     private boolean singleplayer(Player player, String[] args) {
