@@ -42,6 +42,7 @@ import net.kyori.adventure.title.Title;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
 import org.bukkit.Difficulty;
+import org.bukkit.FluidCollisionMode;
 import org.bukkit.GameMode;
 import org.bukkit.GameRule;
 import org.bukkit.Location;
@@ -741,8 +742,8 @@ public final class Game {
         final Duration totalStrokeTime = Duration.between(stroke.getStartTime(), stroke.getEndTime());
         final Duration remainingStrokeTime = Duration.between(now, stroke.getEndTime());
         gp.setStrokeProgress((float) remainingStrokeTime.toMillis() / (float) totalStrokeTime.toMillis());
-        final RayTraceResult rayTrace = player.rayTraceBlocks(4.0);
-        if (rayTrace == null || rayTrace.getHitBlock() == null || !stroke.getBallVector().equals(Vec3i.of(rayTrace.getHitBlock()))) {
+        final RayTraceResult rayTrace = rayTraceBall(player, stroke.getBallVector());
+        if (rayTrace == null) {
             return false;
         }
         final GolfClub club = GolfClub.ofMaterial(player.getInventory().getItemInMainHand().getType());
@@ -811,9 +812,21 @@ public final class Game {
     }
 
     public void onPlayerInteract(PlayerInteractEvent event) {
+        switch (event.getAction()) {
+        case RIGHT_CLICK_BLOCK:
+        case LEFT_CLICK_BLOCK:
+        case RIGHT_CLICK_AIR:
+        case LEFT_CLICK_AIR:
+            // OK
+            // Adventure GameMode appears to always send
+            // RIGHT_CLICK_BLOCK followed by LEFT_CLICK_BLOCK when the
+            // player right clicks a block.
+            break;
+        default:
+            return;
+        }
         if (event.hasBlock() && event.getAction() == Action.RIGHT_CLICK_BLOCK && event.getClickedBlock().getType() == Material.DRAGON_EGG) {
             event.setCancelled(true);
-            return;
         }
         if (event.hasItem() && (event.getAction() == Action.RIGHT_CLICK_BLOCK || event.getAction() == Action.RIGHT_CLICK_AIR) && event.getItem().getType() == Material.COMPASS) {
             event.setCancelled(true);
@@ -825,12 +838,6 @@ public final class Game {
             onPlayerUseMulligan(event.getPlayer());
             return;
         }
-        if (!event.hasBlock() || (event.getAction() != Action.LEFT_CLICK_BLOCK && event.getAction() != Action.RIGHT_CLICK_BLOCK)) {
-            // Adventure GameMode appears to always send
-            // RIGHT_CLICK_BLOCK followed by LEFT_CLICK_BLOCK when the
-            // player right clicks a block.
-            return;
-        }
         if (!event.hasItem()) {
             return;
         }
@@ -839,24 +846,23 @@ public final class Game {
         if (gp == null || !gp.isPlaying() || gp.getState() != GamePlayer.State.STROKE) {
             return;
         }
-        final Vec3i clickVector = Vec3i.of(event.getClickedBlock());
-        if (!clickVector.equals(gp.getStroke().getBallVector())) {
-            return;
-        }
-        final RayTraceResult rayTrace = player.rayTraceBlocks(4.0);
-        if (rayTrace == null || rayTrace.getHitBlock() == null || !clickVector.equals(Vec3i.of(rayTrace.getHitBlock()))) {
+        final Vec3i ballVector = gp.getStroke().getBallVector();
+        final RayTraceResult rayTrace = rayTraceBall(player, ballVector);
+        if (rayTrace == null) {
             return;
         }
         final GolfClub club = GolfClub.ofMaterial(event.getItem().getType());
         if (club == null) {
             return;
         }
+        // Stroke!
+        event.setCancelled(true);
         gp.getStroke().disable();
         gp.setStroke(null);
         gp.setState(GamePlayer.State.FLIGHT);
         gp.setStrokeCount(gp.getStrokeCount() + 1);
-        final Vector velocity = getBallVelocity(rayTrace.getHitPosition(), clickVector, club, gp.getGroundType());
-        final Location ballLocation = clickVector.toCenterFloorLocation(world);
+        final Vector velocity = getBallVelocity(rayTrace.getHitPosition(), ballVector, club, gp.getGroundType());
+        final Location ballLocation = ballVector.toCenterFloorLocation(world);
         gp.setFlightBall(spawnBall(ballLocation, velocity));
         gp.setBallVelocity(velocity);
         world.playSound(ballLocation, Sound.BLOCK_NOTE_BLOCK_IRON_XYLOPHONE, SoundCategory.MASTER, 1f, 0.5f);
@@ -1440,5 +1446,29 @@ public final class Game {
         if (!gamePlayer.spawnCoin(result, player)) return false;
         log("Spawned coin for " + player.getName() + " at " + result);
         return true;
+    }
+
+    /**
+     * Ray trace the player's viewing vector against the ball.  This
+     * will go through any block except for the ball and only return a
+     * result if the ball is actually hit by the trace.
+     *
+     * @param player the player
+     * @param ballVector the vector of the player's ball
+     * @return the RayTraceResult if the ball was hit, null otherwise.
+     */
+    public RayTraceResult rayTraceBall(Player player, Vec3i ballVector) {
+        final Location eye = player.getEyeLocation();
+        RayTraceResult result = player.getWorld().rayTraceBlocks(
+            eye,
+            eye.getDirection(),
+            10.0, // maxDistance
+            FluidCollisionMode.NEVER,
+            true, // ignorePassableBlocks
+            ballVector::isSimilar // filter
+        );
+        return result != null && result.getHitBlock() != null
+            ? result
+            : null;
     }
 }
