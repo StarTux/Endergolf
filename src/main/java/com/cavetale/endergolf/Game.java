@@ -315,21 +315,27 @@ public final class Game {
                     if (list.isEmpty()) return;
                     list.sort(Comparator.comparing(SQLMapPlayerBest::getStrokes));
                     globalBest = list.get(0).getStrokes();
-                    final Component announcement = textOfChildren(Mytems.GOLD_MEDAL,
-                                                                  text(" Best of all time: ", WHITE),
-                                                                  text(PlayerCache.nameForUuid(list.get(0).getPlayer()), GREEN),
-                                                                  text(" with ", WHITE),
-                                                                  text(list.get(0).getStrokes(), GREEN),
-                                                                  text(" strokes", WHITE));
+                    final Component announcement = textOfChildren(
+                        Mytems.GOLD_MEDAL,
+                        text(" Best of all time: ", WHITE),
+                        text(PlayerCache.nameForUuid(list.get(0).getPlayer()), GREEN),
+                        text(" with ", WHITE),
+                        text(list.get(0).getStrokes(), GREEN),
+                        text(" strokes", WHITE)
+                    );
                     for (Player player : getPresentPlayers()) {
                         player.sendMessage(announcement);
                     }
                     for (SQLMapPlayerBest row : list) {
                         final Player player = Bukkit.getPlayer(row.getPlayer());
                         if (player != null && world.equals(player.getWorld())) {
-                            player.sendMessage(textOfChildren(Mytems.GOLD_MEDAL,
-                                                              text(" Personal best: ", WHITE),
-                                                              text(row.getStrokes(), GREEN)));
+                            player.sendMessage(
+                                textOfChildren(
+                                    Mytems.GOLD_MEDAL,
+                                    text(" Personal best: ", WHITE),
+                                    text(row.getStrokes(), GREEN)
+                                )
+                            );
                         }
                     }
                 });
@@ -398,11 +404,16 @@ public final class Game {
             break;
         case PLAY:
             for (Player player : getPresentPlayers()) {
-                player.showTitle(title(empty(),
-                                       text("Game Start", GREEN, ITALIC),
-                                       times(Duration.ZERO,
-                                             Duration.ofSeconds(2),
-                                             Duration.ZERO)));
+                player.showTitle(
+                    title(empty(),
+                          text("Game Start", GREEN, ITALIC),
+                          times(
+                              Duration.ZERO,
+                              Duration.ofSeconds(2),
+                              Duration.ZERO
+                          )
+                    )
+                );
                 player.playSound(player, Sound.ENTITY_FIREWORK_ROCKET_BLAST, SoundCategory.MASTER, 0.5f, 1.5f);
             }
             for (GamePlayer gp : players.values()) {
@@ -446,8 +457,12 @@ public final class Game {
             final long secondsLeft = Duration.between(now, countdownStop).toSeconds();
             if (secondsLeft < countdownSeconds) {
                 for (Player player : getPresentPlayers()) {
-                    player.showTitle(title(text(countdownSeconds, GREEN),
-                                           text("Get Ready", GREEN)));
+                    player.showTitle(
+                        title(
+                            text(countdownSeconds, GREEN),
+                            text("Get Ready", GREEN)
+                        )
+                    );
                     player.playSound(player, Sound.BLOCK_NOTE_BLOCK_IRON_XYLOPHONE, SoundCategory.MASTER, 0.5f, 2f - (float) countdownSeconds * 0.1f);
                 }
                 countdownSeconds = secondsLeft;
@@ -493,11 +508,16 @@ public final class Game {
                     gp.setDisqualified(true);
                     final Player player = gp.getPlayer();
                     if (player != null) {
-                        player.showTitle(title(text("Blow Up", DARK_RED),
-                                               text("Disqualified", DARK_RED),
-                                               times(Duration.ofSeconds(1),
-                                                     Duration.ofSeconds(3),
-                                                     Duration.ofSeconds(1))));
+                        player.showTitle(
+                            title(text("Blow Up", DARK_RED),
+                                  text("Disqualified", DARK_RED),
+                                  times(
+                                      Duration.ofSeconds(1),
+                                      Duration.ofSeconds(3),
+                                      Duration.ofSeconds(1)
+                                  )
+                            )
+                        );
                     }
                     final Component message = text(player.getName() + " had a bad round and was disqualified", DARK_RED);
                     for (Player p : getPresentPlayers()) {
@@ -615,11 +635,17 @@ public final class Game {
                 gp.setState(GamePlayer.State.OBSOLETE);
                 gp.clearPreviewEntities();
                 gp.setDisqualified(true);
-                player.showTitle(title(text("Timeout", DARK_RED),
-                                       text("Disqualified", DARK_RED),
-                                       times(Duration.ofSeconds(1),
-                                             Duration.ofSeconds(3),
-                                             Duration.ofSeconds(1))));
+                player.showTitle(
+                    title(
+                        text("Timeout", DARK_RED),
+                        text("Disqualified", DARK_RED),
+                        times(
+                            Duration.ofSeconds(1),
+                            Duration.ofSeconds(3),
+                            Duration.ofSeconds(1)
+                        )
+                    )
+                );
                 final Component message = text(player.getName() + " timed out and was disqualified", DARK_RED);
                 for (Player p : getPresentPlayers()) {
                     p.sendMessage(message);
@@ -636,11 +662,17 @@ public final class Game {
                 final Vec3i vector = Vec3i.of(lastLocation);
                 if (vector.y <= world.getMinHeight()) {
                     // Void
-                    player.showTitle(title(text("Void", DARK_PURPLE, BOLD),
-                                           text("Your ball fell out of the world", RED),
-                                           times(Duration.ZERO,
-                                                 Duration.ofSeconds(3),
-                                                 Duration.ofSeconds(1))));
+                    player.showTitle(
+                        title(
+                            text("Void", DARK_PURPLE, BOLD),
+                            text("Your ball fell out of the world", RED),
+                            times(
+                                Duration.ZERO,
+                                Duration.ofSeconds(3),
+                                Duration.ofSeconds(1)
+                            )
+                        )
+                    );
                     player.sendMessage(text("Your ball fell out of the world", RED));
                     gp.setState(GamePlayer.State.WAIT);
                     gp.setWaitingSince(now);
@@ -928,10 +960,12 @@ public final class Game {
                     boolean didAnnounce = false;
                     if (globalBest > 0 && strokes < globalBest) {
                         globalBest = strokes;
-                        final Component message = textOfChildren(Mytems.GOLD_MEDAL,
-                                                                 text(" " + gp.getName(), GREEN),
-                                                                 text(" got a new best of all time: ", WHITE),
-                                                                 text(strokes, GREEN));
+                        final Component message = textOfChildren(
+                            Mytems.GOLD_MEDAL,
+                            text(" " + gp.getName(), GREEN),
+                            text(" got a new best of all time: ", WHITE),
+                            text(strokes, GREEN)
+                        );
                         for (Player p : getPresentPlayers()) {
                             p.sendMessage(message);
                         }
@@ -944,10 +978,14 @@ public final class Game {
                                 if (didAnnounce2) return;
                                 final Player player = gp.getPlayer();
                                 if (player == null) return;
-                                player.sendMessage(textOfChildren(text("First personal best on ", WHITE),
-                                                                  text(buildWorld.getName(), GREEN),
-                                                                  text(": ", WHITE),
-                                                                  text(strokes, GREEN)));
+                                player.sendMessage(
+                                    textOfChildren(
+                                        text("First personal best on ", WHITE),
+                                        text(buildWorld.getName(), GREEN),
+                                        text(": ", WHITE),
+                                        text(strokes, GREEN)
+                                    )
+                                );
                             });
                     } else if (best.getStrokes() > strokes) {
                         best.setStrokes(strokes);
@@ -957,24 +995,29 @@ public final class Game {
                                 if (didAnnounce2) return;
                                 final Player player = gp.getPlayer();
                                 if (player == null) return;
-                                player.sendMessage(textOfChildren(Mytems.GOLD_MEDAL,
-                                                                  text(" New personal best on ", WHITE),
-                                                                  text(buildWorld.getName(), GREEN),
-                                                                  text(": ", WHITE),
-                                                                  text(strokes, GREEN)));
+                                player.sendMessage(
+                                    textOfChildren(Mytems.GOLD_MEDAL,
+                                                   text(" New personal best on ", WHITE),
+                                                   text(buildWorld.getName(), GREEN),
+                                                   text(": ", WHITE),
+                                                   text(strokes, GREEN)
+                                    )
+                                );
                             });
                     }
                 });
             final Component term = GolfScoringTerm.getComponent(strokes, par);
-            final Component message = textOfChildren(text(gp.getName(), WHITE),
-                                                     text(" completed ", GRAY),
-                                                     text(buildWorld.getName(), WHITE),
-                                                     text(" in ", GRAY),
-                                                     text(strokes, WHITE),
-                                                     text(" strokes on a ", GRAY),
-                                                     text("par-" + par, WHITE),
-                                                     text(": "),
-                                                     term);
+            final Component message = textOfChildren(
+                text(gp.getName(), WHITE),
+                text(" completed ", GRAY),
+                text(buildWorld.getName(), WHITE),
+                text(" in ", GRAY),
+                text(strokes, WHITE),
+                text(" strokes on a ", GRAY),
+                text("par-" + par, WHITE),
+                text(": "),
+                term
+            );
             for (Player p : getPresentPlayers()) {
                 p.sendMessage(empty());
                 p.sendMessage(message);
@@ -982,16 +1025,24 @@ public final class Game {
             }
             final Player player = gp.getPlayer();
             if (player != null) {
-                player.showTitle(title(term,
-                                       textOfChildren(text("Hole: ", GRAY),
-                                                      text(strokes, WHITE),
-                                                      text(" (Par ", GRAY),
-                                                      text(par, WHITE),
-                                                      text(") | ", GRAY),
-                                                      text(gp.getPerformanceString(), WHITE)),
-                                       times(Duration.ofSeconds(1),
-                                             Duration.ofSeconds(3),
-                                             Duration.ofSeconds(1))));
+                player.showTitle(
+                    title(
+                        term,
+                        textOfChildren(
+                            text("Hole: ", GRAY),
+                            text(strokes, WHITE),
+                            text(" (Par ", GRAY),
+                            text(par, WHITE),
+                            text(") | ", GRAY),
+                            text(gp.getPerformanceString(), WHITE)
+                        ),
+                        times(
+                            Duration.ofSeconds(1),
+                            Duration.ofSeconds(3),
+                            Duration.ofSeconds(1)
+                        )
+                    )
+                );
                 player.playSound(player, Sound.UI_TOAST_CHALLENGE_COMPLETE, SoundCategory.MASTER, 1f, 2f);
                 player.sendMessage(textOfChildren(Mytems.MASTER_FINDER, text(" Use your Ball Compass to spectate", GREEN, BOLD)));
             }
@@ -1026,25 +1077,43 @@ public final class Game {
                 updateBallCompass(player, gp);
                 if (rescued) {
                     gp.setStrokeCount(gp.getStrokeCount() + 1);
-                    player.showTitle(title(ground.getDisplayComponent(),
-                                           text("Bounce Rescue", ground.getColor()),
-                                           times(Duration.ZERO,
-                                                 Duration.ofSeconds(2),
-                                                 Duration.ofSeconds(2))));
-                    player.sendMessage(textOfChildren(text("Your ball landed in the ", WHITE),
-                                                      ground.getDisplayComponent(),
-                                                      text(" and was placed in the ", WHITE),
-                                                      gp.getGroundType().getDisplayComponent(),
-                                                      text(" where it last bounced off the ground.", WHITE),
-                                                      text(" (+1 Stroke Penalty)", DARK_RED)));
+                    player.showTitle(
+                        title(ground.getDisplayComponent(),
+                              text("Bounce Rescue", ground.getColor()),
+                              times(Duration.ZERO,
+                                    Duration.ofSeconds(2),
+                                    Duration.ofSeconds(2)
+                              )
+                        )
+                    );
+                    player.sendMessage(
+                        textOfChildren(
+                            text("Your ball landed in the ", WHITE),
+                            ground.getDisplayComponent(),
+                            text(" and was placed in the ", WHITE),
+                            gp.getGroundType().getDisplayComponent(),
+                            text(" where it last bounced off the ground.", WHITE),
+                            text(" (+1 Stroke Penalty)", DARK_RED)
+                        )
+                    );
                 } else {
-                    player.showTitle(title(ground.getDisplayComponent(),
-                                           text("Try Again", ground.getColor()),
-                                           times(Duration.ZERO,
-                                                 Duration.ofSeconds(2),
-                                                 Duration.ofSeconds(2))));
-                    player.sendMessage(textOfChildren(text("Your ball landed in the ", ground.getColor()),
-                                                      ground.getDisplayComponent()));
+                    player.showTitle(
+                        title(
+                            ground.getDisplayComponent(),
+                            text("Try Again", ground.getColor()),
+                            times(
+                                Duration.ZERO,
+                                Duration.ofSeconds(2),
+                                Duration.ofSeconds(2)
+                            )
+                        )
+                    );
+                    player.sendMessage(
+                        textOfChildren(
+                            text("Your ball landed in the ", ground.getColor()),
+                            ground.getDisplayComponent()
+                        )
+                    );
                 }
                 switch (ground) {
                 case WATER:
@@ -1077,14 +1146,28 @@ public final class Game {
             final Player player = gp.getPlayer();
             if (player != null) {
                 updateBallCompass(player, gp);
-                player.sendMessage(textOfChildren(text("Your ball landed in the ", WHITE),
-                                                  ground.getDisplayComponent(),
-                                                  text(" " + distance + " yard" + (distance == 1 ? "" : "s") + " away", WHITE)));
-                player.showTitle(title(ground.getDisplayComponent(),
-                                       textOfChildren(text("distance ", GRAY), text(distance, ground.getColor()), text(" yard" + (distance == 1 ? "" : "s"), GRAY)),
-                                       times(Duration.ZERO,
-                                             Duration.ofSeconds(1),
-                                             Duration.ofSeconds(2))));
+                player.sendMessage(
+                    textOfChildren(
+                        text("Your ball landed in the ", WHITE),
+                        ground.getDisplayComponent(),
+                        text(" " + distance + " meter" + (distance == 1 ? "" : "s") + " away", WHITE)
+                    )
+                );
+                player.showTitle(
+                    title(
+                        ground.getDisplayComponent(),
+                        textOfChildren(
+                            text("distance ", GRAY),
+                            text(distance, ground.getColor()),
+                            text(" meter" + (distance == 1 ? "" : "s"), GRAY)
+                        ),
+                        times(
+                            Duration.ZERO,
+                            Duration.ofSeconds(1),
+                            Duration.ofSeconds(2)
+                        )
+                    )
+                );
                 player.playSound(player, Sound.BLOCK_STONE_HIT, SoundCategory.MASTER, 1f, 0.5f);
                 player.playSound(player, Sound.BLOCK_SAND_HIT, SoundCategory.MASTER, 1f, 1.5f);
             }
@@ -1157,22 +1240,34 @@ public final class Game {
         sidebar.add(textOfChildren(text(tiny("playing "), GRAY), text(totalNotFinished, WHITE), text("/", DARK_GRAY), text(totalPlaying, WHITE)));
         if (gp != null && gp.isPlaying()) {
             final int strokes = gp.getStrokeCount();
-            sidebar.add(textOfChildren(text(tiny("score "), GRAY),
-                                       text(strokes, WHITE),
-                                       text(tiny(" (par "), GRAY),
-                                       text(par, WHITE),
-                                       text(")", GRAY)));
-            sidebar.add(textOfChildren(text(tiny("max "), GRAY),
-                                       text(maxStrokes, WHITE)));
+            sidebar.add(
+                textOfChildren(
+                    text(tiny("score "), GRAY),
+                    text(strokes, WHITE),
+                    text(tiny(" (par "), GRAY),
+                    text(par, WHITE),
+                    text(")", GRAY)
+                )
+            );
+            sidebar.add(
+                textOfChildren(
+                    text(tiny("max "), GRAY),
+                    text(maxStrokes, WHITE)
+                )
+            );
             if (!gp.isFinished()) {
                 final Location playerEyeLocation = event.getPlayer().getEyeLocation();
                 final Location directionLocation = new Location(world, 0, 0, 0);
                 directionLocation.setDirection(holeLocation.toVector().subtract(playerEyeLocation.toVector()));
                 final Unicode holeArrow = Yaw.yawToArrow(directionLocation.getYaw() - playerEyeLocation.getYaw());
-                sidebar.add(textOfChildren(text(tiny("hole "), GRAY),
-                                           text(gp.getDistance(), WHITE),
-                                           text(tiny("yd"), DARK_GRAY),
-                                           text(" " + holeArrow.getString(), WHITE)));
+                sidebar.add(
+                    textOfChildren(
+                        text(tiny("hole "), GRAY),
+                        text(gp.getDistance(), WHITE),
+                        text(tiny("m"), DARK_GRAY),
+                        text(" " + holeArrow.getString(), WHITE)
+                    )
+                );
             }
             switch (gp.getState()) {
             case WAIT:
@@ -1265,11 +1360,13 @@ public final class Game {
         final ItemStack item = new ItemStack(Material.COMPASS);
         item.setData(DataComponentTypes.LODESTONE_TRACKER, lodestoneTracker().tracked(true).location(teeVector.toCenterLocation(world)));
         item.setData(DataComponentTypes.CUSTOM_NAME, text("Ball Compass", LIGHT_PURPLE));
-        final List<Component> lore = List.of(text(tiny("Always points to your"), GRAY).decoration(ITALIC, false),
-                                             text(tiny("ball as long as it is"), GRAY).decoration(ITALIC, false),
-                                             text(tiny("on the ground."), GRAY).decoration(ITALIC, false),
-                                             empty(),
-                                             textOfChildren(Mytems.MOUSE_RIGHT, text(" Teleport", GRAY)).decoration(ITALIC, false));
+        final List<Component> lore = List.of(
+            text(tiny("Always points to your"), GRAY).decoration(ITALIC, false),
+            text(tiny("ball as long as it is"), GRAY).decoration(ITALIC, false),
+            text(tiny("on the ground."), GRAY).decoration(ITALIC, false),
+            empty(),
+            textOfChildren(Mytems.MOUSE_RIGHT, text(" Teleport", GRAY)).decoration(ITALIC, false)
+        );
         item.setData(DataComponentTypes.LORE, lore(lore));
         item.setData(DataComponentTypes.ITEM_MODEL, Mytems.MASTER_FINDER.getNamespacedKey());
         return item;
@@ -1285,11 +1382,13 @@ public final class Game {
     public ItemStack makeMulliganItem() {
         final ItemStack item = new ItemStack(Material.ARROW);
         item.setData(DataComponentTypes.CUSTOM_NAME, text("Mulligan", DARK_RED));
-        final List<Component> lore = List.of(text(tiny("Put the ball back to"), GRAY).decoration(ITALIC, false),
-                                             text(tiny("where it was before"), GRAY).decoration(ITALIC, false),
-                                             text(tiny("the previous stroke."), GRAY).decoration(ITALIC, false),
-                                             empty(),
-                                             textOfChildren(Mytems.MOUSE_RIGHT, text(" Do-Over", GRAY)).decoration(ITALIC, false));
+        final List<Component> lore = List.of(
+            text(tiny("Put the ball back to"), GRAY).decoration(ITALIC, false),
+            text(tiny("where it was before"), GRAY).decoration(ITALIC, false),
+            text(tiny("the previous stroke."), GRAY).decoration(ITALIC, false),
+            empty(),
+            textOfChildren(Mytems.MOUSE_RIGHT, text(" Do-Over", GRAY)).decoration(ITALIC, false)
+        );
         item.setData(DataComponentTypes.LORE, lore(lore));
         item.setData(DataComponentTypes.ITEM_MODEL, Mytems.REDO.getNamespacedKey());
         return item;
@@ -1391,10 +1490,14 @@ public final class Game {
                 rank += 1;
                 lastStrokes = strokes;
             }
-            scoreLines.add(textOfChildren(Glyph.toComponent("" + rank),
-                                          text(subscript(strokes), GRAY),
-                                          space(),
-                                          text(gp.getName(), WHITE)));
+            scoreLines.add(
+                textOfChildren(
+                    Glyph.toComponent("" + rank),
+                    text(subscript(strokes), GRAY),
+                    space(),
+                    text(gp.getName(), WHITE)
+                )
+            );
         }
     }
 
