@@ -64,7 +64,7 @@ public enum GroundType {
             return WATER;
         }
         final Material ball = block.getType();
-        if (!ball.isAir()) {
+        if (!ball.isAir() && ball != Material.LIGHT) {
             if (ball == Material.WATER) {
                 return WATER;
             }
