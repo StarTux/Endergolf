@@ -63,6 +63,13 @@ public enum GroundType {
         if (block.getBlockData() instanceof Waterlogged waterlogged && waterlogged.isWaterlogged()) {
             return WATER;
         }
+        final Material above = block.getRelative(0, 1, 0).getType();
+        if (above == Material.WATER) {
+            return WATER;
+        }
+        if (above == Material.LAVA) {
+            return LAVA;
+        }
         final Material ball = block.getType();
         if (!ball.isAir() && ball != Material.LIGHT) {
             if (ball == Material.WATER) {
