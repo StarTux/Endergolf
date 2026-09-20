@@ -8,6 +8,7 @@ import com.cavetale.core.event.minigame.MinigameMatchType;
 import com.cavetale.core.playercache.PlayerCache;
 import com.cavetale.fam.trophy.Highscore;
 import com.winthier.creative.BuildWorld;
+import com.winthier.kit.Kits;
 import java.util.ArrayList;
 import java.util.List;
 import org.bukkit.command.CommandSender;
@@ -155,5 +156,6 @@ public final class EndergolfAdminCommand extends AbstractCommand<EndergolfPlugin
         final int count = plugin.rewardHighscore();
         sender.sendMessage(text(count + " scores rewarded", YELLOW));
         Highscore.rewardMoneyWithFeedback(sender, plugin, plugin.getSaveTag().getScores(), "Endergolf");
+        Kits.autoCreateKit(sender, "endergolf", plugin.getSaveTag().getScores().keySet());
     }
 }

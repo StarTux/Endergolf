@@ -17,6 +17,7 @@ depend:
 - MagicMap
 - AFK
 - SQL
+- Kit
 
 softdepend: []
 
